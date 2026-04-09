@@ -52,6 +52,21 @@
     .section-label { font-size: 12px; color: #888; font-weight: 500; letter-spacing: 0.04em; margin-bottom: 10px; text-transform: uppercase; }
     .empty-state { text-align: center; padding: 3rem; color: #aaa; font-size: 14px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; }
 
+    /* WAITING QUEUE */
+    .waiting-section { margin-bottom: 1.5rem; }
+    .waiting-cards { display: flex; flex-direction: column; gap: 8px; }
+    .waiting-card { background: #fff; border: 1px solid #F0C060; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .waiting-card-info { display: flex; align-items: center; gap: 10px; flex: 1; }
+    .waiting-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 5px; white-space: nowrap; }
+    .waiting-badge.wc { background: #E1F5EE; color: #0F6E56; }
+    .waiting-badge.ef { background: #E6F1FB; color: #0C447C; }
+    .waiting-meta { font-size: 12px; color: #888; }
+    .waiting-age { font-size: 11px; color: #bbb; margin-left: auto; white-space: nowrap; }
+    .waiting-claim-btn { padding: 8px 16px; background: #F5A623; color: #fff; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.15s; }
+    .waiting-claim-btn:hover { background: #D4881A; }
+    .waiting-claim-btn:disabled { background: #ccc; cursor: default; }
+    .waiting-empty { text-align: center; padding: 1rem; color: #ccc; font-size: 13px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; }
+
     /* LEAD CARDS */
     .lead-cards { display: flex; flex-direction: column; gap: 12px; }
     .lead-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; overflow: hidden; }
@@ -95,9 +110,9 @@
     .btn-wn        { border-color: #B4B2A9; color: #444441; }                      .btn-wn:hover        { background: #F1EFE8; }
 
     .disposed-banner { padding: 12px 16px; text-align: center; font-size: 13px; font-weight: 500; border-top: 1px solid #f0f0f0; }
-    .disposed-positive  { background: #E1F5EE; color: #085041; }
+    .disposed-positive   { background: #E1F5EE; color: #085041; }
     .disposed-salesforce { background: #E6F1FB; color: #0C447C; }
-    .disposed-negative  { background: #FCEBEB; color: #791F1F; }
+    .disposed-negative   { background: #FCEBEB; color: #791F1F; }
 
     /* POPUP */
     .popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
@@ -170,7 +185,15 @@
     <div class="stat"><div class="stat-label">Waiting</div><div class="stat-val" id="s-waiting">0</div></div>
   </div>
 
-  <div class="section-label">My leads</div>
+  <!-- WAITING QUEUE -->
+  <div class="waiting-section" id="waiting-section">
+    <div class="section-label">⏳ Waiting Queue</div>
+    <div class="waiting-cards" id="waiting-cards">
+      <div class="waiting-empty" id="waiting-empty">No leads waiting</div>
+    </div>
+  </div>
+
+  <div class="section-label">My Leads</div>
   <div class="lead-cards" id="lead-cards">
     <div class="empty-state" id="empty-msg">No leads claimed yet — a chime will sound when one comes in.</div>
   </div>
@@ -188,7 +211,7 @@
     <div class="timer-bar-wrap"><div class="timer-bar" id="p-bar"></div></div>
     <div class="popup-result" id="p-result"></div>
     <button class="popup-claim-btn" id="p-btn" onclick="claimLead()">Claim this lead</button>
-    <div class="popup-pass" onclick="dismissPopup()">Pass</div>
+    <div class="popup-pass" onclick="passLead()">Pass</div>
   </div>
 </div>
 
@@ -205,7 +228,10 @@
   let timerInterval = null, cooldownInterval = null, timeLeft = 30;
   let myClaimed = 0, teamTotal = 0, countPositive = 0, countSalesforce = 0, countNegative = 0, pending = 0;
   let onCooldown = false, cooldownLeft = 0;
-  let hasActiveLead = false; // claim lock
+  let hasActiveLead = false;
+
+  // waitingQueue: { [leadId]: { lead, addedAt } }
+  const waitingQueue = {};
 
   const TZ_ZONES = [
     { id: 'tz-eastern',  tz: 'America/New_York' },
@@ -227,8 +253,7 @@
       const raw = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(now);
       const hN = parseInt(raw.find(p => p.type === 'hour').value);
       const mN = parseInt(raw.find(p => p.type === 'minute').value);
-      const tot = hN * 60 + mN;
-      el.className = 'tz-time ' + (tot >= 480 && tot < 1020 ? 'in-hours' : 'out-hours');
+      el.className = 'tz-time ' + ((hN * 60 + mN) >= 480 && (hN * 60 + mN) < 1020 ? 'in-hours' : 'out-hours');
     });
   }
 
@@ -270,6 +295,8 @@
         addLeadCard(msg.lead);
         myClaimed++;
         hasActiveLead = true;
+        // remove from waiting queue if it was there
+        removeFromWaiting(msg.lead.id);
         pending = Math.max(0, pending - 1);
         updateStats();
         startCooldown();
@@ -277,11 +304,15 @@
       }
       if (msg.type === 'claim_failed') {
         showResult(false, msg.claimedBy);
+        // also remove from waiting queue since someone else got it
+        removeFromWaiting(msg.leadId);
         pending = Math.max(0, pending - 1);
         updateStats();
       }
       if (msg.type === 'lead_claimed') {
         teamTotal++;
+        // remove from waiting queue — someone else claimed it
+        removeFromWaiting(msg.leadId);
         pending = Math.max(0, pending - 1);
         updateStats();
       }
@@ -328,9 +359,11 @@
         document.getElementById('p-bar').style.width = (timeLeft/30*100) + '%';
         if (timeLeft <= 0) {
           clearInterval(timerInterval);
-          document.getElementById('p-btn').textContent = 'Expired';
-          document.getElementById('p-btn').disabled = true;
-          setTimeout(dismissPopup, 1500);
+          // expired — add to waiting queue
+          addToWaiting(lead);
+          pending = Math.max(0, pending - 1);
+          updateStats();
+          dismissPopup();
         }
       }, 1000);
     }
@@ -342,6 +375,23 @@
     document.getElementById('p-btn').textContent = 'Claiming...';
     document.getElementById('p-btn').disabled = true;
     clearInterval(timerInterval);
+  }
+
+  // Pass = dismiss popup and add to waiting queue
+  function passLead() {
+    clearInterval(timerInterval);
+    if (currentLead) {
+      addToWaiting(currentLead);
+      pending = Math.max(0, pending - 1);
+      updateStats();
+    }
+    dismissPopup();
+  }
+
+  function dismissPopup() {
+    clearInterval(timerInterval);
+    document.getElementById('popup-overlay').classList.remove('active');
+    currentLeadId = null; currentLead = null;
   }
 
   function showResult(success, claimedBy) {
@@ -358,12 +408,70 @@
     setTimeout(dismissPopup, 2500);
   }
 
-  function dismissPopup() {
-    clearInterval(timerInterval);
-    document.getElementById('popup-overlay').classList.remove('active');
-    currentLeadId = null; currentLead = null;
+  // ── WAITING QUEUE ────────────────────────────────────────────
+  function addToWaiting(lead) {
+    if (waitingQueue[lead.id]) return; // already there
+    waitingQueue[lead.id] = { lead, addedAt: Date.now() };
+    renderWaitingQueue();
   }
 
+  function removeFromWaiting(leadId) {
+    if (!waitingQueue[leadId]) return;
+    delete waitingQueue[leadId];
+    renderWaitingQueue();
+  }
+
+  function renderWaitingQueue() {
+    const container = document.getElementById('waiting-cards');
+    const emptyEl   = document.getElementById('waiting-empty');
+    const ids = Object.keys(waitingQueue);
+
+    // clear existing rows (but not the empty placeholder)
+    container.querySelectorAll('.waiting-card').forEach(el => el.remove());
+
+    if (ids.length === 0) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    ids.forEach(id => {
+      const { lead, addedAt } = waitingQueue[id];
+      const isWC = lead.leadType === 'Working Capital';
+      const ageSeconds = Math.floor((Date.now() - addedAt) / 1000);
+      const ageStr = ageSeconds < 60 ? `${ageSeconds}s ago` : `${Math.floor(ageSeconds/60)}m ago`;
+
+      const row = document.createElement('div');
+      row.className = 'waiting-card';
+      row.id = 'waiting-' + id;
+      row.innerHTML = `
+        <div class="waiting-card-info">
+          <span class="waiting-badge ${isWC ? 'wc' : 'ef'}">${lead.leadType}</span>
+          <span class="waiting-meta">${tzLabel(lead.timezone)}</span>
+          <span class="waiting-age">${ageStr}</span>
+        </div>
+        <button class="waiting-claim-btn" id="wclaim-${id}" onclick="claimFromQueue('${id}')">Claim</button>
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  function claimFromQueue(leadId) {
+    if (!ws || hasActiveLead) {
+      alert('Dispose your current lead before claiming a new one.');
+      return;
+    }
+    const btn = document.getElementById('wclaim-' + leadId);
+    if (btn) { btn.textContent = 'Claiming...'; btn.disabled = true; }
+    ws.send(JSON.stringify({ type: 'claim', leadId, repName }));
+  }
+
+  // Refresh age labels every 30s
+  setInterval(() => {
+    if (Object.keys(waitingQueue).length > 0) renderWaitingQueue();
+  }, 30000);
+
+  // ── COOLDOWN ─────────────────────────────────────────────────
   function startCooldown() {
     onCooldown = true; cooldownLeft = 60;
     document.getElementById('cooldown-bar').style.display = 'flex';
@@ -387,6 +495,7 @@
     document.getElementById('co-count').textContent = cooldownLeft;
   }
 
+  // ── LEAD CARDS ───────────────────────────────────────────────
   function addLeadCard(lead) {
     if (!lead) return;
     const empty = document.getElementById('empty-msg');
@@ -395,8 +504,7 @@
     const card = document.createElement('div');
     card.className = 'lead-card';
     card.id = 'card-' + lead.id;
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const timeStr = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     card.innerHTML = `
       <div class="lead-card-header">
         <span class="lead-type-badge ${isWC?'badge-wc':'badge-ef'}">${lead.leadType}</span>
@@ -498,7 +606,7 @@
     document.getElementById('s-positive').textContent   = countPositive;
     document.getElementById('s-salesforce').textContent = countSalesforce;
     document.getElementById('s-negative').textContent   = countNegative;
-    document.getElementById('s-waiting').textContent    = pending;
+    document.getElementById('s-waiting').textContent    = Object.keys(waitingQueue).length;
   }
 
   function formatPhone(phone) {
