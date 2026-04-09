@@ -17,29 +17,42 @@
     .login-card button { width: 100%; padding: 11px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; }
     .login-card button:hover { background: #0F6E56; }
 
-    #dashboard { display: none; max-width: 900px; margin: 0 auto; padding: 1.5rem; }
-    .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+    #dashboard { display: none; max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+    .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; }
     .top-bar h1 { font-size: 20px; font-weight: 600; }
     .conn-status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #666; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
     .dot.live { background: #1D9E75; animation: pulse 2s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-    .agent-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; margin-bottom: 1.5rem; }
+    /* TIMEZONE BAR */
+    .tz-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.2rem; }
+    .tz-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 10px 14px; text-align: center; }
+    .tz-label { font-size: 11px; color: #888; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+    .tz-time { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+    .tz-time.in-hours { color: #1D9E75; }
+    .tz-time.out-hours { color: #aaa; }
+
+    .agent-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; margin-bottom: 1.2rem; }
     .avatar { width: 34px; height: 34px; border-radius: 50%; background: #CECBF6; color: #3C3489; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
     .agent-name { font-size: 14px; font-weight: 500; }
     .agent-sub { font-size: 12px; color: #888; }
     .cooldown-bar { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888; }
     .cooldown-timer { font-weight: 600; color: #D85A30; }
 
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
-    .stat { background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; padding: 14px 16px; }
-    .stat-label { font-size: 12px; color: #888; margin-bottom: 4px; }
-    .stat-val { font-size: 24px; font-weight: 600; }
+    /* STATS */
+    .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 1.2rem; }
+    .stat { background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; padding: 12px 14px; }
+    .stat-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .stat-val { font-size: 22px; font-weight: 700; }
+    .stat-val.positive { color: #0F6E56; }
+    .stat-val.salesforce { color: #185FA5; }
+    .stat-val.negative { color: #993C1D; }
 
     .section-label { font-size: 12px; color: #888; font-weight: 500; letter-spacing: 0.04em; margin-bottom: 10px; text-transform: uppercase; }
     .empty-state { text-align: center; padding: 3rem; color: #aaa; font-size: 14px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; }
 
+    /* LEAD CARDS */
     .lead-cards { display: flex; flex-direction: column; gap: 12px; }
     .lead-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; overflow: hidden; }
     .lead-card-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; }
@@ -58,20 +71,35 @@
     .notes-label { font-size: 12px; color: #888; margin-bottom: 6px; font-weight: 500; }
     .notes-input { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 14px; resize: vertical; min-height: 70px; font-family: inherit; outline: none; }
     .notes-input:focus { border-color: #1D9E75; }
-    .dispose-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+
+    /* DISPOSE BUTTONS */
+    .dispose-section { margin-top: 14px; }
+    .dispose-group-label { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; margin-top: 10px; }
+    .dispose-group-label.lbl-positive { color: #0F6E56; }
+    .dispose-group-label.lbl-salesforce { color: #185FA5; }
+    .dispose-group-label.lbl-negative { color: #993C1D; }
+    .dispose-buttons { display: grid; gap: 8px; }
+    .dispose-buttons.cols-2 { grid-template-columns: 1fr 1fr; }
+    .dispose-buttons.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
     .dispose-btn { padding: 10px 8px; border-radius: 8px; border: 1px solid #e0e0e0; background: #fff; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; text-align: center; }
     .dispose-btn:hover { transform: translateY(-1px); }
-    .btn-lm { border-color: #FAC775; color: #633806; } .btn-lm:hover { background: #FAEEDA; }
-    .btn-na { border-color: #B4B2A9; color: #444441; } .btn-na:hover { background: #F1EFE8; }
-    .btn-nq { border-color: #F09595; color: #791F1F; } .btn-nq:hover { background: #FCEBEB; }
-    .btn-wn { border-color: #B4B2A9; color: #444441; } .btn-wn:hover { background: #F1EFE8; }
-    .btn-imn-no { border-color: #9FE1CB; color: #085041; } .btn-imn-no:hover { background: #E1F5EE; }
-    .btn-imn-app { border-color: #5DCAA5; color: #085041; background: #E1F5EE; } .btn-imn-app:hover { background: #9FE1CB; }
-    .disposed-banner { padding: 12px 16px; text-align: center; font-size: 13px; font-weight: 500; border-top: 1px solid #f0f0f0; }
-    .disposed-vs { background: #FAEEDA; color: #633806; }
-    .disposed-sf { background: #E1F5EE; color: #085041; }
-    .disposed-arch { background: #F1EFE8; color: #5F5E5A; }
+    .dispose-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
 
+    .btn-imn-app   { border-color: #5DCAA5; color: #085041; background: #E1F5EE; } .btn-imn-app:hover   { background: #9FE1CB; }
+    .btn-imn-sent  { border-color: #9FE1CB; color: #085041; }                      .btn-imn-sent:hover  { background: #E1F5EE; }
+    .btn-lm        { border-color: #93C4F0; color: #0C447C; }                      .btn-lm:hover        { background: #E6F1FB; }
+    .btn-na        { border-color: #93C4F0; color: #0C447C; }                      .btn-na:hover        { background: #E6F1FB; }
+    .btn-iml       { border-color: #93C4F0; color: #0C447C; }                      .btn-iml:hover       { background: #E6F1FB; }
+    .btn-nq        { border-color: #F09595; color: #791F1F; }                      .btn-nq:hover        { background: #FCEBEB; }
+    .btn-ni        { border-color: #F09595; color: #791F1F; }                      .btn-ni:hover        { background: #FCEBEB; }
+    .btn-wn        { border-color: #B4B2A9; color: #444441; }                      .btn-wn:hover        { background: #F1EFE8; }
+
+    .disposed-banner { padding: 12px 16px; text-align: center; font-size: 13px; font-weight: 500; border-top: 1px solid #f0f0f0; }
+    .disposed-positive  { background: #E1F5EE; color: #085041; }
+    .disposed-salesforce { background: #E6F1FB; color: #0C447C; }
+    .disposed-negative  { background: #FCEBEB; color: #791F1F; }
+
+    /* POPUP */
     .popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
     .popup-overlay.active { opacity: 1; pointer-events: all; }
     .popup { background: #fff; border-radius: 16px; padding: 2rem; max-width: 360px; width: 90%; text-align: center; }
@@ -81,6 +109,7 @@
     .popup-type.ef { color: #185FA5; }
     .popup-tz { font-size: 13px; color: #888; margin-bottom: 1.5rem; }
     .popup-hours-warn { background: #FCEBEB; color: #791F1F; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 1rem; }
+    .popup-locked { background: #FFF3CD; color: #856404; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 1rem; font-weight: 500; }
     .popup-timer { font-size: 13px; color: #888; margin-bottom: 6px; }
     .timer-bar-wrap { height: 4px; background: #eee; border-radius: 2px; margin-bottom: 1.5rem; overflow: hidden; }
     .timer-bar { height: 100%; background: #D85A30; border-radius: 2px; transition: width 1s linear; }
@@ -112,6 +141,15 @@
     <h1>Lead Claim Board</h1>
     <div class="conn-status"><div class="dot" id="conn-dot"></div><span id="conn-label">Connecting...</span></div>
   </div>
+
+  <!-- TIMEZONE CLOCKS -->
+  <div class="tz-bar">
+    <div class="tz-card"><div class="tz-label">Eastern</div><div class="tz-time" id="tz-eastern">--:--</div></div>
+    <div class="tz-card"><div class="tz-label">Central</div><div class="tz-time" id="tz-central">--:--</div></div>
+    <div class="tz-card"><div class="tz-label">Mountain</div><div class="tz-time" id="tz-mountain">--:--</div></div>
+    <div class="tz-card"><div class="tz-label">Pacific</div><div class="tz-time" id="tz-pacific">--:--</div></div>
+  </div>
+
   <div class="agent-bar">
     <div class="avatar" id="user-avatar">?</div>
     <div>
@@ -122,12 +160,16 @@
       Next claim in <span class="cooldown-timer" id="cooldown-count">60</span>s
     </div>
   </div>
+
   <div class="stats">
     <div class="stat"><div class="stat-label">You claimed</div><div class="stat-val" id="s-mine">0</div></div>
     <div class="stat"><div class="stat-label">Team total</div><div class="stat-val" id="s-team">0</div></div>
-    <div class="stat"><div class="stat-label">Disposed</div><div class="stat-val" id="s-disposed">0</div></div>
+    <div class="stat"><div class="stat-label">Positive</div><div class="stat-val positive" id="s-positive">0</div></div>
+    <div class="stat"><div class="stat-label">→ VanillaSoft</div><div class="stat-val salesforce" id="s-salesforce">0</div></div>
+    <div class="stat"><div class="stat-label">Negative</div><div class="stat-val negative" id="s-negative">0</div></div>
     <div class="stat"><div class="stat-label">Waiting</div><div class="stat-val" id="s-waiting">0</div></div>
   </div>
+
   <div class="section-label">My leads</div>
   <div class="lead-cards" id="lead-cards">
     <div class="empty-state" id="empty-msg">No leads claimed yet — a chime will sound when one comes in.</div>
@@ -141,7 +183,8 @@
     <div class="popup-type" id="p-type">Working Capital</div>
     <div class="popup-tz" id="p-tz"></div>
     <div class="popup-hours-warn" id="p-warn" style="display:none">Outside 8am–5pm in lead's timezone — proceed with caution</div>
-    <div class="popup-timer">Expires in <span id="p-countdown">30</span>s</div>
+    <div class="popup-locked" id="p-locked" style="display:none">⚠️ Dispose your current lead before claiming a new one</div>
+    <div class="popup-timer" id="p-timer-row">Expires in <span id="p-countdown">30</span>s</div>
     <div class="timer-bar-wrap"><div class="timer-bar" id="p-bar"></div></div>
     <div class="popup-result" id="p-result"></div>
     <button class="popup-claim-btn" id="p-btn" onclick="claimLead()">Claim this lead</button>
@@ -160,8 +203,34 @@
   const WS_URL = SERVER_URL.replace('https', 'wss');
   let repName = '', ws = null, currentLeadId = null, currentLead = null;
   let timerInterval = null, cooldownInterval = null, timeLeft = 30;
-  let myClaimed = 0, teamTotal = 0, disposed = 0, pending = 0;
+  let myClaimed = 0, teamTotal = 0, countPositive = 0, countSalesforce = 0, countNegative = 0, pending = 0;
   let onCooldown = false, cooldownLeft = 0;
+  let hasActiveLead = false; // claim lock
+
+  const TZ_ZONES = [
+    { id: 'tz-eastern',  tz: 'America/New_York' },
+    { id: 'tz-central',  tz: 'America/Chicago' },
+    { id: 'tz-mountain', tz: 'America/Denver' },
+    { id: 'tz-pacific',  tz: 'America/Los_Angeles' },
+  ];
+
+  function updateClocks() {
+    const now = new Date();
+    TZ_ZONES.forEach(({ id, tz }) => {
+      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true });
+      const parts = fmt.formatToParts(now);
+      const h  = parts.find(p => p.type === 'hour').value;
+      const m  = parts.find(p => p.type === 'minute').value;
+      const ap = (parts.find(p => p.type === 'dayperiod' || p.type === 'dayPeriod') || {}).value || '';
+      const el = document.getElementById(id);
+      el.textContent = `${h}:${m} ${ap}`;
+      const raw = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(now);
+      const hN = parseInt(raw.find(p => p.type === 'hour').value);
+      const mN = parseInt(raw.find(p => p.type === 'minute').value);
+      const tot = hN * 60 + mN;
+      el.className = 'tz-time ' + (tot >= 480 && tot < 1020 ? 'in-hours' : 'out-hours');
+    });
+  }
 
   window.addEventListener('DOMContentLoaded', () => {
     const p = new URLSearchParams(window.location.search);
@@ -179,13 +248,15 @@
     document.getElementById('user-avatar').textContent = repName.substring(0,2).toUpperCase();
     const now = new Date();
     document.getElementById('shift-time').textContent = 'Shift started ' + now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    updateClocks();
+    setInterval(updateClocks, 10000);
     connectWS();
   }
   document.getElementById('name-input').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
 
   function connectWS() {
     ws = new WebSocket(WS_URL);
-    ws.onopen = () => { setConn(true); };
+    ws.onopen = () => setConn(true);
     ws.onclose = () => { setConn(false); setTimeout(connectWS, 3000); };
     ws.onerror = () => ws.close();
     ws.onmessage = (event) => {
@@ -193,11 +264,12 @@
       if (msg.type === 'new_lead') {
         pending++;
         updateStats();
-        if (!onCooldown) showPopup(msg.lead);
+        showPopup(msg.lead);
       }
       if (msg.type === 'claim_success') {
         addLeadCard(msg.lead);
         myClaimed++;
+        hasActiveLead = true;
         pending = Math.max(0, pending - 1);
         updateStats();
         startCooldown();
@@ -214,8 +286,6 @@
         updateStats();
       }
       if (msg.type === 'lead_disposed') {
-        disposed++;
-        updateStats();
         markDisposed(msg.leadId, msg.disposition);
       }
     };
@@ -236,25 +306,38 @@
     document.getElementById('p-tz').textContent = 'Lead timezone: ' + tzLabel(lead.timezone);
     document.getElementById('p-warn').style.display = lead.withinCallingHours ? 'none' : 'block';
     document.getElementById('p-result').textContent = '';
-    document.getElementById('p-btn').textContent = 'Claim this lead';
-    document.getElementById('p-btn').disabled = false;
-    document.getElementById('p-btn').style.background = '';
+
+    const locked = hasActiveLead;
+    document.getElementById('p-locked').style.display = locked ? 'block' : 'none';
+    document.getElementById('p-timer-row').style.display = locked ? 'none' : 'block';
+    document.getElementById('p-btn').textContent = locked ? 'Dispose current lead first' : 'Claim this lead';
+    document.getElementById('p-btn').disabled = locked;
+    document.getElementById('p-btn').style.background = locked ? '#aaa' : '';
+
     document.getElementById('popup-overlay').classList.add('active');
-    timeLeft = 30;
-    document.getElementById('p-countdown').textContent = timeLeft;
-    document.getElementById('p-bar').style.width = '100%';
-    try { document.getElementById('chime').play(); } catch(e){}
-    clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-      timeLeft--;
+
+    if (!locked) {
+      timeLeft = 30;
       document.getElementById('p-countdown').textContent = timeLeft;
-      document.getElementById('p-bar').style.width = (timeLeft/30*100) + '%';
-      if (timeLeft <= 0) { clearInterval(timerInterval); document.getElementById('p-btn').textContent = 'Expired'; document.getElementById('p-btn').disabled = true; setTimeout(dismissPopup, 1500); }
-    }, 1000);
+      document.getElementById('p-bar').style.width = '100%';
+      try { document.getElementById('chime').play(); } catch(e){}
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('p-countdown').textContent = timeLeft;
+        document.getElementById('p-bar').style.width = (timeLeft/30*100) + '%';
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          document.getElementById('p-btn').textContent = 'Expired';
+          document.getElementById('p-btn').disabled = true;
+          setTimeout(dismissPopup, 1500);
+        }
+      }, 1000);
+    }
   }
 
   function claimLead() {
-    if (!currentLeadId || !ws) return;
+    if (!currentLeadId || !ws || hasActiveLead) return;
     ws.send(JSON.stringify({ type: 'claim', leadId: currentLeadId, repName }));
     document.getElementById('p-btn').textContent = 'Claiming...';
     document.getElementById('p-btn').disabled = true;
@@ -334,13 +417,24 @@
         </div>
         <div class="notes-label">Notes</div>
         <textarea class="notes-input" id="notes-${lead.id}" placeholder="Add call notes here..."></textarea>
-        <div class="dispose-buttons">
-          <button class="dispose-btn btn-lm" onclick="dispose('${lead.id}','left_message')">Left Message</button>
-          <button class="dispose-btn btn-na" onclick="dispose('${lead.id}','no_answer')">No Answer</button>
-          <button class="dispose-btn btn-nq" onclick="dispose('${lead.id}','not_qualified')">Not Qualified</button>
-          <button class="dispose-btn btn-wn" onclick="dispose('${lead.id}','wrong_number')">Wrong Number</button>
-          <button class="dispose-btn btn-imn-no" onclick="dispose('${lead.id}','imn_no_app')">IMN – No App</button>
-          <button class="dispose-btn btn-imn-app" onclick="dispose('${lead.id}','imn_app_taken')">IMN – App Taken</button>
+        <div class="dispose-section">
+          <div class="dispose-group-label lbl-positive">✅ Positive — Salesforce</div>
+          <div class="dispose-buttons cols-2">
+            <button class="dispose-btn btn-imn-app"  onclick="dispose('${lead.id}','imn_app_taken')">IMN – App Taken</button>
+            <button class="dispose-btn btn-imn-sent" onclick="dispose('${lead.id}','imn_app_sent')">IMN – App Sent</button>
+          </div>
+          <div class="dispose-group-label lbl-salesforce">📋 Sent to VanillaSoft</div>
+          <div class="dispose-buttons cols-3">
+            <button class="dispose-btn btn-lm"  onclick="dispose('${lead.id}','left_message')">Left Message</button>
+            <button class="dispose-btn btn-na"  onclick="dispose('${lead.id}','no_answer')">No Answer</button>
+            <button class="dispose-btn btn-iml" onclick="dispose('${lead.id}','in_market_later')">In Market Later</button>
+          </div>
+          <div class="dispose-group-label lbl-negative">❌ Negative — Archive</div>
+          <div class="dispose-buttons cols-3">
+            <button class="dispose-btn btn-nq" onclick="dispose('${lead.id}','not_qualified')">Not Qualified</button>
+            <button class="dispose-btn btn-ni" onclick="dispose('${lead.id}','not_interested')">Not Interested</button>
+            <button class="dispose-btn btn-wn" onclick="dispose('${lead.id}','wrong_number')">Wrong Number</button>
+          </div>
         </div>
       </div>
     `;
@@ -356,40 +450,55 @@
     const notes = document.getElementById('notes-'+leadId)?.value || '';
     if (!ws) return;
     ws.send(JSON.stringify({ type: 'dispose', leadId, repName, disposition, notes }));
-    markDisposed(leadId, disposition);
-    disposed++;
+    hasActiveLead = false;
+    const group = disposedGroup(disposition);
+    if (group === 'positive')    countPositive++;
+    if (group === 'salesforce')  countSalesforce++;
+    if (group === 'negative')    countNegative++;
     updateStats();
+    markDisposed(leadId, disposition);
   }
 
   function markDisposed(leadId, disposition) {
     const card = document.getElementById('card-'+leadId);
     if (!card) return;
-    const btns = card.querySelectorAll('.dispose-btn');
-    btns.forEach(b => b.disabled = true);
+    card.querySelectorAll('.dispose-btn').forEach(b => b.disabled = true);
     const notesEl = card.querySelector('.notes-input');
     if (notesEl) notesEl.disabled = true;
     const banner = document.createElement('div');
-    banner.className = 'disposed-banner ' + disposedClass(disposition);
+    const group = disposedGroup(disposition);
+    banner.className = 'disposed-banner disposed-' + group;
     banner.textContent = disposedLabel(disposition);
     card.appendChild(banner);
   }
 
-  function disposedClass(d) {
-    if (['left_message','no_answer'].includes(d)) return 'disposed-vs';
-    if (['imn_no_app','imn_app_taken'].includes(d)) return 'disposed-sf';
-    return 'disposed-arch';
+  function disposedGroup(d) {
+    if (['imn_app_taken','imn_app_sent'].includes(d))               return 'positive';
+    if (['left_message','no_answer','in_market_later'].includes(d)) return 'salesforce';
+    return 'negative';
   }
 
   function disposedLabel(d) {
-    const map = { left_message:'Sent to VanillaSoft — Left Message', no_answer:'Sent to VanillaSoft — No Answer', not_qualified:'Archived — Not Qualified', wrong_number:'Archived — Wrong Number', imn_no_app:'Sent to Salesforce — IMN No App', imn_app_taken:'Sent to Salesforce — IMN App Taken' };
+    const map = {
+      imn_app_taken:   '✅ Sent to Salesforce — IMN App Taken',
+      imn_app_sent:    '✅ Sent to Salesforce — IMN App Sent',
+      left_message:    '📋 Sent to VanillaSoft — Left Message',
+      no_answer:       '📋 Sent to VanillaSoft — No Answer',
+      in_market_later: '📋 Sent to VanillaSoft — In Market Later',
+      not_qualified:   '❌ Archived — Not Qualified',
+      not_interested:  '❌ Archived — Not Interested',
+      wrong_number:    '❌ Archived — Wrong Number',
+    };
     return map[d] || d;
   }
 
   function updateStats() {
-    document.getElementById('s-mine').textContent = myClaimed;
-    document.getElementById('s-team').textContent = teamTotal;
-    document.getElementById('s-disposed').textContent = disposed;
-    document.getElementById('s-waiting').textContent = pending;
+    document.getElementById('s-mine').textContent       = myClaimed;
+    document.getElementById('s-team').textContent       = teamTotal;
+    document.getElementById('s-positive').textContent   = countPositive;
+    document.getElementById('s-salesforce').textContent = countSalesforce;
+    document.getElementById('s-negative').textContent   = countNegative;
+    document.getElementById('s-waiting').textContent    = pending;
   }
 
   function formatPhone(phone) {
@@ -400,7 +509,11 @@
   }
 
   function tzLabel(tz) {
-    const map = { 'America/New_York':'Eastern','America/Chicago':'Central','America/Denver':'Mountain','America/Los_Angeles':'Pacific','America/Phoenix':'Arizona','Pacific/Honolulu':'Hawaii','America/Anchorage':'Alaska' };
+    const map = {
+      'America/New_York':'Eastern','America/Chicago':'Central',
+      'America/Denver':'Mountain','America/Los_Angeles':'Pacific',
+      'America/Phoenix':'Arizona','Pacific/Honolulu':'Hawaii','America/Anchorage':'Alaska'
+    };
     return map[tz] || tz;
   }
 </script>
