@@ -143,11 +143,12 @@ wss.on('connection', (ws) => {
 
 async function handleDisposition({ lead, disposition, notes, repName }) {
   const payload = { ...lead, notes, disposition, repName, disposedAt: new Date().toISOString() };
-  if (['left_message', 'no_answer'].includes(disposition)) {
-    await sendToZapier(process.env.ZAPIER_VANILLASOFT_WEBHOOK, payload);
-  } else if (['imn_no_app', 'imn_app_taken'].includes(disposition)) {
+  if (['imn_app_taken', 'imn_app_sent'].includes(disposition)) {
     await sendToZapier(process.env.ZAPIER_SALESFORCE_WEBHOOK, payload);
+  } else if (['left_message', 'no_answer', 'in_market_later'].includes(disposition)) {
+    await sendToZapier(process.env.ZAPIER_VANILLASOFT_WEBHOOK, payload);
   }
+  // not_qualified, not_interested, wrong_number → archive only (no webhook)
 }
 
 async function sendToZapier(webhookUrl, payload) {
