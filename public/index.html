@@ -29,44 +29,23 @@
     }
     .login-card button:hover { background: #0F6E56; }
     #dashboard { display: none; max-width: 860px; margin: 0 auto; padding: 1.5rem; }
-    .top-bar {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 1.5rem;
-    }
+    .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
     .top-bar h1 { font-size: 20px; font-weight: 600; }
     .conn-status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #666; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
     .dot.live { background: #1D9E75; animation: pulse 2s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-    .agent-bar {
-      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-      background: #fff; border-radius: 10px; border: 1px solid #e8e8e8;
-      margin-bottom: 1.5rem;
-    }
-    .avatar {
-      width: 34px; height: 34px; border-radius: 50%;
-      background: #CECBF6; color: #3C3489;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 600;
-    }
+    .agent-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; margin-bottom: 1.5rem; }
+    .avatar { width: 34px; height: 34px; border-radius: 50%; background: #CECBF6; color: #3C3489; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
     .agent-name { font-size: 14px; font-weight: 500; }
     .agent-sub { font-size: 12px; color: #888; }
-    .stats {
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 10px; margin-bottom: 1.5rem;
-    }
-    .stat {
-      background: #fff; border-radius: 10px; border: 1px solid #e8e8e8;
-      padding: 14px 16px;
-    }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+    .stat { background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; padding: 14px 16px; }
     .stat-label { font-size: 12px; color: #888; margin-bottom: 4px; }
     .stat-val { font-size: 24px; font-weight: 600; }
     .section-label { font-size: 12px; color: #888; font-weight: 500; letter-spacing: 0.04em; margin-bottom: 10px; text-transform: uppercase; }
     .lead-list { display: flex; flex-direction: column; gap: 8px; }
-    .lead-card {
-      background: #fff; border: 1px solid #e8e8e8; border-radius: 10px;
-      padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;
-    }
+    .lead-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
     .lead-card.faded { opacity: 0.5; }
     .lead-info { display: flex; align-items: center; gap: 12px; }
     .lead-avatar { width: 38px; height: 38px; border-radius: 50%; background: #B5D4F4; color: #0C447C; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
@@ -76,35 +55,16 @@
     .badge-mine { font-size: 12px; color: #0F6E56; background: #E1F5EE; padding: 5px 12px; border-radius: 8px; white-space: nowrap; }
     .badge-other { font-size: 12px; color: #888; background: #f0f0f0; padding: 5px 12px; border-radius: 8px; white-space: nowrap; }
     .empty-state { text-align: center; padding: 3rem; color: #aaa; font-size: 14px; }
-    .popup-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s;
-    }
+    .popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
     .popup-overlay.active { opacity: 1; pointer-events: all; }
-    .popup {
-      background: #fff; border-radius: 16px; border: 1px solid #e0e0e0;
-      padding: 2rem; max-width: 380px; width: 90%; text-align: center;
-    }
-    .popup-badge {
-      display: inline-block; background: #FAECE7; color: #993C1D;
-      font-size: 12px; font-weight: 600; padding: 4px 12px;
-      border-radius: 8px; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.04em;
-    }
+    .popup { background: #fff; border-radius: 16px; border: 1px solid #e0e0e0; padding: 2rem; max-width: 380px; width: 90%; text-align: center; }
+    .popup-badge { display: inline-block; background: #FAECE7; color: #993C1D; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 8px; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.04em; }
     .popup-phone { font-size: 26px; font-weight: 600; margin-bottom: 4px; }
-    .popup-msg {
-      font-size: 14px; color: #555; background: #f8f8f8;
-      border-radius: 8px; padding: 10px 14px; margin: 1rem 0;
-      line-height: 1.5; font-style: italic;
-    }
+    .popup-msg { font-size: 14px; color: #555; background: #f8f8f8; border-radius: 8px; padding: 10px 14px; margin: 1rem 0; line-height: 1.5; font-style: italic; }
     .popup-timer { font-size: 13px; color: #888; margin-bottom: 8px; }
     .timer-bar-wrap { height: 4px; background: #eee; border-radius: 2px; margin-bottom: 1.5rem; overflow: hidden; }
     .timer-bar { height: 100%; background: #D85A30; border-radius: 2px; transition: width 1s linear; }
-    .popup-claim-btn {
-      width: 100%; padding: 13px; background: #1D9E75; color: #fff;
-      border: none; border-radius: 10px; font-size: 16px; font-weight: 600;
-      cursor: pointer; margin-bottom: 10px; transition: background 0.15s;
-    }
+    .popup-claim-btn { width: 100%; padding: 13px; background: #1D9E75; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 10px; transition: background 0.15s; }
     .popup-claim-btn:hover { background: #0F6E56; }
     .popup-claim-btn:disabled { background: #aaa; cursor: default; }
     .popup-dismiss { font-size: 13px; color: #aaa; cursor: pointer; text-decoration: underline; }
@@ -156,11 +116,22 @@
     <div class="popup-dismiss" onclick="dismissPopup()">Pass</div>
   </div>
 </div>
+<audio id="chime" preload="auto"></audio>
 <script>
   const SERVER_URL = 'https://lead-claim-server-production.up.railway.app';
   const WS_URL = SERVER_URL.replace('https', 'wss');
   let repName = '', ws = null, currentLeadId = null, timerInterval = null;
   let timeLeft = 30, myClaimed = 0, teamTotal = 0, pendingCount = 0;
+
+  // Auto-login from URL param
+  window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const autoName = urlParams.get('rep');
+    if (autoName) {
+      document.getElementById('name-input').value = autoName;
+      login();
+    }
+  });
 
   function login() {
     const input = document.getElementById('name-input').value.trim();
@@ -246,9 +217,7 @@
     currentLeadId = null;
   }
 
-  function markLeadClaimed(leadId, claimedBy) {
-    addLeadToList(leadId, claimedBy);
-  }
+  function markLeadClaimed(leadId, claimedBy) { addLeadToList(leadId, claimedBy); }
 
   function addLeadToList(leadId, claimedBy) {
     const emptyMsg = document.getElementById('empty-msg');
@@ -278,6 +247,5 @@
     return phone;
   }
 </script>
-<audio id="chime" preload="auto"></audio>
 </body>
 </html>
