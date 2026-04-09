@@ -77,7 +77,8 @@
     .lead-meta { font-size: 12px; color: #aaa; }
     .lead-card-body { padding: 16px; }
     .lead-name { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
-    .lead-phone { font-size: 15px; color: #378ADD; margin-bottom: 12px; }
+    .lead-phone { font-size: 15px; color: #378ADD; margin-bottom: 12px; display: inline-block; text-decoration: none; cursor: pointer; }
+    .lead-phone:hover { text-decoration: underline; color: #1D9E75; }
     .lead-tz { font-size: 12px; color: #888; margin-bottom: 12px; }
     .lead-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
     .lead-field { background: #f8f8f8; border-radius: 8px; padding: 8px 12px; }
@@ -589,7 +590,7 @@
       </div>
       <div class="lead-card-body">
         <div class="lead-name">${lead.firstName} ${lead.lastName}</div>
-        <div class="lead-phone">${formatPhone(lead.phone)}</div>
+        <a class="lead-phone" href="tel:${lead.phone}" title="Click to call with Vonage">${formatPhone(lead.phone)}</a>
         <div class="lead-tz">${lead.email}${lead.state ? ' · '+lead.state : ''}</div>
         <div class="lead-fields">
           ${field('Company', lead.companyName)}
