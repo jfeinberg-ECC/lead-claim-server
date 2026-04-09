@@ -80,8 +80,6 @@
     .lead-phone { font-size: 15px; color: #378ADD; margin-bottom: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
     .lead-phone:hover { color: #1D9E75; }
     .copy-hint { font-size: 12px; opacity: 0.5; }
-    .copy-toast { position: fixed; bottom: 80px; right: 20px; background: #333; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
-    .copy-toast.show { opacity: 1; }
     .lead-tz { font-size: 12px; color: #888; margin-bottom: 12px; }
     .lead-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
     .lead-field { background: #f8f8f8; border-radius: 8px; padding: 8px 12px; }
@@ -139,6 +137,8 @@
 
     .cooldown-overlay { position: fixed; bottom: 20px; right: 20px; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 12px 18px; font-size: 14px; color: #666; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: none; z-index: 50; }
     .cooldown-overlay.active { display: block; }
+    .copy-toast { position: fixed; bottom: 80px; right: 20px; background: #333; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    .copy-toast.show { opacity: 1; }
   </style>
 </head>
 <body>
@@ -158,7 +158,6 @@
     <div class="conn-status"><div class="dot" id="conn-dot"></div><span id="conn-label">Connecting...</span></div>
   </div>
 
-  <!-- NOTIFICATION PERMISSION BAR -->
   <div class="notif-bar" id="notif-bar" style="display:none">
     🔔 Allow notifications so you're alerted when a new lead comes in — even if you're on another tab.
     <button onclick="requestNotifPermission()">Allow Notifications</button>
@@ -204,7 +203,6 @@
   </div>
 </div>
 
-<!-- CLAIM POPUP -->
 <div class="popup-overlay" id="popup-overlay">
   <div class="popup">
     <div class="popup-new">New Lead</div>
@@ -224,31 +222,28 @@
   You can claim another lead in <strong id="co-count">60</strong>s
 </div>
 
-<audio id="chime" preload="auto"></audio>
 <div class="copy-toast" id="copy-toast">📋 Number copied!</div>
+<audio id="chime" preload="auto"></audio>
 
 <script>
   const SERVER_URL = 'https://lead-claim-server-production.up.railway.app';
   const WS_URL = SERVER_URL.replace('https', 'wss');
-  const LS_REP        = 'lcb_repName';
-  const LS_ACTIVE     = 'lcb_activeLead';     // the lead card the rep owns
-  const LS_WAITING    = 'lcb_waitingQueue';   // shared waiting queue (per-browser)
-  const LS_STATS      = 'lcb_stats';          // session stats
+  const LS_REP    = 'lcb_repName';
+  const LS_ACTIVE = 'lcb_activeLead';
+  const LS_STATS  = 'lcb_stats';
 
   let repName = '', ws = null, currentLeadId = null, currentLead = null;
   let timerInterval = null, cooldownInterval = null, timeLeft = 30;
   let myClaimed = 0, teamTotal = 0, countPositive = 0, countSalesforce = 0, countNegative = 0, pending = 0;
   let onCooldown = false, cooldownLeft = 0;
   let hasActiveLead = false;
-  let waitingQueue = {};  // { leadId: { lead, addedAt } }
+  let waitingQueue = {};
 
-  // ── LOCALSTORAGE HELPERS ─────────────────────────────────────
+  // ── LOCALSTORAGE ─────────────────────────────────────────
   function saveState() {
     if (repName) localStorage.setItem(LS_REP, repName);
     localStorage.setItem(LS_ACTIVE, JSON.stringify(hasActiveLead ? (window._activeLeadData || null) : null));
-    localStorage.setItem(LS_WAITING, JSON.stringify(waitingQueue));
     localStorage.setItem(LS_STATS, JSON.stringify({ myClaimed, teamTotal, countPositive, countSalesforce, countNegative }));
-    // save cooldown end time so refresh can restore it
     if (onCooldown && cooldownLeft > 0) {
       localStorage.setItem('lcb_cooldownUntil', Date.now() + cooldownLeft * 1000);
     } else {
@@ -259,47 +254,42 @@
   function loadState() {
     try {
       const stats = JSON.parse(localStorage.getItem(LS_STATS) || '{}');
-      myClaimed      = stats.myClaimed      || 0;
-      teamTotal      = stats.teamTotal      || 0;
-      countPositive  = stats.countPositive  || 0;
-      countSalesforce= stats.countSalesforce|| 0;
-      countNegative  = stats.countNegative  || 0;
-      waitingQueue   = JSON.parse(localStorage.getItem(LS_WAITING) || '{}');
-      const active   = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
-      if (active) {
-        window._activeLeadData = active;
-        hasActiveLead = true;
-        addLeadCard(active);
-      }
+      myClaimed       = stats.myClaimed       || 0;
+      teamTotal       = stats.teamTotal       || 0;
+      countPositive   = stats.countPositive   || 0;
+      countSalesforce = stats.countSalesforce || 0;
+      countNegative   = stats.countNegative   || 0;
+      const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
+      if (active) { window._activeLeadData = active; hasActiveLead = true; addLeadCard(active); }
+      // restore cooldown
+      const until = parseInt(localStorage.getItem('lcb_cooldownUntil') || '0');
+      const remaining = Math.ceil((until - Date.now()) / 1000);
+      if (remaining > 0) startCooldown(remaining);
     } catch(e) { console.warn('State load error', e); }
   }
 
-  // ── NOTIFICATIONS ────────────────────────────────────────────
+  // ── NOTIFICATIONS ─────────────────────────────────────────
   function checkNotifPermission() {
     if (!('Notification' in window)) return;
-    if (Notification.permission === 'default') {
-      document.getElementById('notif-bar').style.display = 'flex';
-    }
+    if (Notification.permission === 'default') document.getElementById('notif-bar').style.display = 'flex';
   }
 
   function requestNotifPermission() {
-    Notification.requestPermission().then(perm => {
-      document.getElementById('notif-bar').style.display = 'none';
-    });
+    Notification.requestPermission().then(() => document.getElementById('notif-bar').style.display = 'none');
   }
 
   function sendNotification(lead) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     const n = new Notification('🔥 New Lead — ' + lead.leadType, {
       body: `${tzLabel(lead.timezone)} timezone · Click to claim`,
-      icon: 'https://lead-claim-server-production.up.railway.app/favicon.ico',
-      requireInteraction: true,  // stays until dismissed
-      tag: 'lead-' + lead.id     // unique per lead so none get swallowed
+      icon: SERVER_URL + '/favicon.ico',
+      requireInteraction: true,
+      tag: 'lead-' + lead.id
     });
     n.onclick = () => { window.focus(); n.close(); };
   }
 
-  // ── TIMEZONE CLOCKS ──────────────────────────────────────────
+  // ── CLOCKS ────────────────────────────────────────────────
   const TZ_ZONES = [
     { id: 'tz-eastern',  tz: 'America/New_York' },
     { id: 'tz-central',  tz: 'America/Chicago' },
@@ -323,7 +313,7 @@
     });
   }
 
-  // ── LOGIN ────────────────────────────────────────────────────
+  // ── LOGIN ─────────────────────────────────────────────────
   window.addEventListener('DOMContentLoaded', () => {
     const p = new URLSearchParams(window.location.search);
     const auto = p.get('rep') || localStorage.getItem(LS_REP);
@@ -350,7 +340,7 @@
   }
   document.getElementById('name-input').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
 
-  // ── WEBSOCKET ────────────────────────────────────────────────
+  // ── WEBSOCKET ─────────────────────────────────────────────
   function connectWS() {
     ws = new WebSocket(WS_URL);
     ws.onopen = () => setConn(true);
@@ -359,10 +349,22 @@
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
 
+      if (msg.type === 'waiting_queue_init') {
+        msg.queue.forEach(row => {
+          const lead = row.lead_data;
+          if (!waitingQueue[lead.id]) waitingQueue[lead.id] = { lead, addedAt: new Date(row.added_at).getTime() };
+        });
+        renderWaitingQueue();
+        updateStats();
+      }
+
+      if (msg.type === 'lead_waiting') {
+        addToWaiting(msg.lead, new Date(msg.addedAt).getTime());
+      }
+
       if (msg.type === 'new_lead') {
         sendNotification(msg.lead);
         if (onCooldown || hasActiveLead) {
-          // rep is busy — drop straight into waiting queue
           addToWaiting(msg.lead);
         } else {
           pending++;
@@ -370,6 +372,7 @@
           showPopup(msg.lead);
         }
       }
+
       if (msg.type === 'claim_success') {
         window._activeLeadData = msg.lead;
         addLeadCard(msg.lead);
@@ -378,10 +381,11 @@
         removeFromWaiting(msg.lead.id);
         pending = Math.max(0, pending - 1);
         updateStats();
-        startCooldown();
+        startCooldown(60);
         dismissPopup();
         saveState();
       }
+
       if (msg.type === 'claim_failed') {
         showResult(false, msg.claimedBy);
         removeFromWaiting(msg.leadId);
@@ -389,19 +393,18 @@
         updateStats();
         saveState();
       }
+
       if (msg.type === 'claim_blocked') {
-        const btn = document.getElementById('p-btn');
         const r = document.getElementById('p-result');
-        if (msg.reason === 'cooldown') {
-          r.textContent = `Cooldown — ${msg.secondsLeft}s remaining`;
-          r.className = 'popup-result failed';
-        } else if (msg.reason === 'active_lead') {
-          r.textContent = 'Dispose your current lead first.';
-          r.className = 'popup-result failed';
-        }
+        const btn = document.getElementById('p-btn');
+        r.className = 'popup-result failed';
+        r.textContent = msg.reason === 'cooldown'
+          ? `Cooldown — ${msg.secondsLeft}s remaining`
+          : 'Dispose your current lead first.';
         if (btn) { btn.textContent = 'Blocked'; btn.style.background = '#aaa'; btn.disabled = true; }
         setTimeout(dismissPopup, 2000);
       }
+
       if (msg.type === 'lead_claimed') {
         teamTotal++;
         removeFromWaiting(msg.leadId);
@@ -409,6 +412,7 @@
         updateStats();
         saveState();
       }
+
       if (msg.type === 'lead_disposed') {
         markDisposed(msg.leadId, msg.disposition);
       }
@@ -420,7 +424,7 @@
     document.getElementById('conn-label').textContent = live ? 'Live' : 'Reconnecting...';
   }
 
-  // ── POPUP ────────────────────────────────────────────────────
+  // ── POPUP ─────────────────────────────────────────────────
   function showPopup(lead) {
     currentLeadId = lead.id;
     currentLead = lead;
@@ -452,7 +456,7 @@
         document.getElementById('p-bar').style.width = (timeLeft/30*100) + '%';
         if (timeLeft <= 0) {
           clearInterval(timerInterval);
-          addToWaiting(lead);
+          if (ws) ws.send(JSON.stringify({ type: 'expire', leadId: lead.id, lead, repName }));
           pending = Math.max(0, pending - 1);
           updateStats();
           dismissPopup();
@@ -471,8 +475,8 @@
 
   function passLead() {
     clearInterval(timerInterval);
-    if (currentLead) {
-      addToWaiting(currentLead);
+    if (currentLead && ws) {
+      ws.send(JSON.stringify({ type: 'pass', leadId: currentLead.id, lead: currentLead, repName }));
       pending = Math.max(0, pending - 1);
       updateStats();
     }
@@ -499,19 +503,19 @@
     setTimeout(dismissPopup, 2500);
   }
 
-  // ── WAITING QUEUE ────────────────────────────────────────────
-  function addToWaiting(lead) {
+  // ── WAITING QUEUE ─────────────────────────────────────────
+  function addToWaiting(lead, addedAt) {
     if (waitingQueue[lead.id]) return;
-    waitingQueue[lead.id] = { lead, addedAt: Date.now() };
+    waitingQueue[lead.id] = { lead, addedAt: addedAt || Date.now() };
     renderWaitingQueue();
-    saveState();
+    updateStats();
   }
 
   function removeFromWaiting(leadId) {
     if (!waitingQueue[leadId]) return;
     delete waitingQueue[leadId];
     renderWaitingQueue();
-    saveState();
+    updateStats();
   }
 
   function renderWaitingQueue() {
@@ -525,7 +529,7 @@
       const { lead, addedAt } = waitingQueue[id];
       const isWC = lead.leadType === 'Working Capital';
       const ageSec = Math.floor((Date.now() - addedAt) / 1000);
-      const ageStr = ageSec < 60 ? `${ageSec}s ago` : `${Math.floor(ageSec/60)}m ago`;
+      const ageStr = ageSec < 60 ? `${ageSec}s ago` : ageSec < 3600 ? `${Math.floor(ageSec/60)}m ago` : ageSec < 86400 ? `${Math.floor(ageSec/3600)}h ago` : `${Math.floor(ageSec/86400)}d ago`;
       const row = document.createElement('div');
       row.className = 'waiting-card';
       row.id = 'waiting-' + id;
@@ -551,9 +555,9 @@
 
   setInterval(() => { if (Object.keys(waitingQueue).length > 0) renderWaitingQueue(); }, 30000);
 
-  // ── COOLDOWN ─────────────────────────────────────────────────
-  function startCooldown() {
-    onCooldown = true; cooldownLeft = 60;
+  // ── COOLDOWN ──────────────────────────────────────────────
+  function startCooldown(seconds) {
+    onCooldown = true; cooldownLeft = seconds || 60;
     document.getElementById('cooldown-bar').style.display = 'flex';
     document.getElementById('cooldown-overlay').classList.add('active');
     updateCooldownDisplay();
@@ -561,11 +565,13 @@
     cooldownInterval = setInterval(() => {
       cooldownLeft--;
       updateCooldownDisplay();
+      saveState();
       if (cooldownLeft <= 0) {
         clearInterval(cooldownInterval);
         onCooldown = false;
         document.getElementById('cooldown-bar').style.display = 'none';
         document.getElementById('cooldown-overlay').classList.remove('active');
+        localStorage.removeItem('lcb_cooldownUntil');
       }
     }, 1000);
   }
@@ -575,11 +581,9 @@
     document.getElementById('co-count').textContent = cooldownLeft;
   }
 
-  // ── LEAD CARDS ───────────────────────────────────────────────
+  // ── LEAD CARDS ────────────────────────────────────────────
   function addLeadCard(lead) {
-    if (!lead) return;
-    // don't add duplicate cards on refresh
-    if (document.getElementById('card-' + lead.id)) return;
+    if (!lead || document.getElementById('card-' + lead.id)) return;
     const empty = document.getElementById('empty-msg');
     if (empty) empty.style.display = 'none';
     const isWC = lead.leadType === 'Working Capital';
@@ -594,7 +598,7 @@
       </div>
       <div class="lead-card-body">
         <div class="lead-name">${lead.firstName} ${lead.lastName}</div>
-        <div class="lead-phone" onclick="copyPhone('${lead.phone}')" title="Click to copy number">${formatPhone(lead.phone)} <span class="copy-hint">📋</span></div>
+        <div class="lead-phone" onclick="copyPhone('${lead.phone}')" title="Click to copy">${formatPhone(lead.phone)} <span class="copy-hint">📋</span></div>
         <div class="lead-tz">${lead.email}${lead.state ? ' · '+lead.state : ''}</div>
         <div class="lead-fields">
           ${field('Company', lead.companyName)}
@@ -634,6 +638,15 @@
   function field(label, val) {
     if (!val) return '';
     return `<div class="lead-field"><div class="field-label">${label}</div><div class="field-val">${val}</div></div>`;
+  }
+
+  function copyPhone(phone) {
+    const clean = (phone || '').replace(/\D/g, '');
+    navigator.clipboard.writeText(clean).then(() => {
+      const toast = document.getElementById('copy-toast');
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    });
   }
 
   function dispose(leadId, disposition) {
@@ -698,15 +711,6 @@
     const d = c.startsWith('1') ? c.slice(1) : c;
     const m = d.match(/^(\d{3})(\d{3})(\d{4})$/);
     return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
-  }
-
-  function copyPhone(phone) {
-    const clean = (phone || '').replace(/\D/g, '');
-    navigator.clipboard.writeText(clean).then(() => {
-      const toast = document.getElementById('copy-toast');
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 2000);
-    });
   }
 
   function tzLabel(tz) {
