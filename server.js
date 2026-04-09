@@ -13,6 +13,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 const claimedLeads = {};
 const leadData = {};
 const clients = new Set();
+const repCooldowns = {};    // { repName: timestamp of last claim }
+const repActiveLeads = {};  // { repName: leadId } undisposed lead per rep
+const COOLDOWN_MS = 60000;  // 60 seconds
 
 const areaCodeTimezones = {
   '201':'America/New_York','202':'America/New_York','203':'America/New_York','207':'America/New_York',
@@ -118,10 +121,23 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(data);
       if (msg.type === 'claim') {
         const { leadId, repName } = msg;
+        const now = Date.now();
+        const lastClaim = repCooldowns[repName] || 0;
+        const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastClaim)) / 1000);
+        const hasActive = repActiveLeads[repName] && repActiveLeads[repName] !== leadId;
+
         if (claimedLeads[leadId]) {
           ws.send(JSON.stringify({ type: 'claim_failed', leadId, claimedBy: claimedLeads[leadId] }));
+        } else if (hasActive) {
+          ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'active_lead', leadId }));
+          console.log(`${repName} blocked — already has active lead ${repActiveLeads[repName]}`);
+        } else if (now - lastClaim < COOLDOWN_MS) {
+          ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'cooldown', secondsLeft, leadId }));
+          console.log(`${repName} blocked — cooldown ${secondsLeft}s remaining`);
         } else {
           claimedLeads[leadId] = repName;
+          repCooldowns[repName] = now;
+          repActiveLeads[repName] = leadId;
           const lead = leadData[leadId];
           ws.send(JSON.stringify({ type: 'claim_success', leadId, lead }));
           broadcastAll({ type: 'lead_claimed', leadId, claimedBy: repName });
@@ -132,6 +148,8 @@ wss.on('connection', (ws) => {
         const { leadId, repName, disposition, notes } = msg;
         const lead = leadData[leadId] || {};
         handleDisposition({ lead, disposition, notes, repName });
+        // clear the rep's active lead lock so they can claim again
+        if (repActiveLeads[repName] === leadId) delete repActiveLeads[repName];
         broadcastAll({ type: 'lead_disposed', leadId, disposition, claimedBy: repName });
         console.log(`Disposed ${leadId}: ${disposition}`);
       }
@@ -189,7 +207,7 @@ app.post('/webhook/lead', (req, res) => {
     fundsUsedFor: body.funds_used_for || body.what_will_the_funds_be_used_for || '',
     conductsBusiness: body.conducts_business || body.how_do_you_conduct_business || '',
     campaignName: body.campaign_name || '',
-    formName: body.form_name || ''
+    formName: body.form_name || '',
   };
 
   leadData[lead.id] = lead;
