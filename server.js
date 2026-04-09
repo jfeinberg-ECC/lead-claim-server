@@ -2,6 +2,8 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const { Pool } = require('pg');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -10,13 +12,90 @@ const wss = new WebSocket.Server({ server });
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ── DATABASE ─────────────────────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS leads (
+      id TEXT PRIMARY KEY,
+      lead_type TEXT,
+      first_name TEXT,
+      last_name TEXT,
+      phone TEXT,
+      email TEXT,
+      company_name TEXT,
+      state TEXT,
+      timezone TEXT,
+      within_calling_hours BOOLEAN,
+      qualify_amount TEXT,
+      timeline TEXT,
+      time_in_business TEXT,
+      monthly_revenue TEXT,
+      funds_used_for TEXT,
+      conducts_business TEXT,
+      campaign_name TEXT,
+      form_name TEXT,
+      received_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS lead_events (
+      id SERIAL PRIMARY KEY,
+      lead_id TEXT,
+      event_type TEXT,  -- 'claimed', 'disposed', 'passed', 'expired'
+      rep_name TEXT,
+      disposition TEXT,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS waiting_queue (
+      lead_id TEXT PRIMARY KEY,
+      lead_data JSONB,
+      added_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS admins (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      is_super_admin BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      token TEXT PRIMARY KEY,
+      admin_id INTEGER REFERENCES admins(id),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '24 hours'
+    );
+  `);
+
+  // Create default super admin if none exists (user: admin, pass: changeme123)
+  const existing = await pool.query('SELECT id FROM admins WHERE is_super_admin = TRUE LIMIT 1');
+  if (existing.rows.length === 0) {
+    const hash = crypto.createHash('sha256').update('changeme123').digest('hex');
+    await pool.query(
+      'INSERT INTO admins (username, password_hash, is_super_admin) VALUES ($1, $2, TRUE) ON CONFLICT DO NOTHING',
+      ['admin', hash]
+    );
+    console.log('Default super admin created: admin / changeme123');
+  }
+  console.log('Database initialized');
+}
+
+// ── IN-MEMORY STATE ──────────────────────────────────────────
 const claimedLeads = {};
 const leadData = {};
 const clients = new Set();
 const repCooldowns = {};    // { repName: timestamp of last claim }
-const repActiveLeads = {};  // { repName: leadId } undisposed lead per rep
-const COOLDOWN_MS = 60000;  // 60 seconds
+const repActiveLeads = {};  // { repName: leadId }
+const COOLDOWN_MS = 60000;
 
+// ── TIMEZONE HELPERS ─────────────────────────────────────────
 const areaCodeTimezones = {
   '201':'America/New_York','202':'America/New_York','203':'America/New_York','207':'America/New_York',
   '212':'America/New_York','215':'America/New_York','216':'America/New_York','217':'America/Chicago',
@@ -96,8 +175,7 @@ const areaCodeTimezones = {
 function getTimezoneForPhone(phone) {
   const cleaned = (phone || '').replace(/\D/g, '');
   const digits = cleaned.startsWith('1') ? cleaned.slice(1) : cleaned;
-  const areaCode = digits.substring(0, 3);
-  return areaCodeTimezones[areaCode] || 'America/New_York';
+  return areaCodeTimezones[digits.substring(0, 3)] || 'America/New_York';
 }
 
 function isWithinCallingHours(phone) {
@@ -108,17 +186,27 @@ function isWithinCallingHours(phone) {
   }).formatToParts(now);
   const h = parseInt(parts.find(p => p.type === 'hour').value);
   const m = parseInt(parts.find(p => p.type === 'minute').value);
-  const totalMins = h * 60 + m;
-  return totalMins >= 480 && totalMins < 1020;
+  return (h * 60 + m) >= 480 && (h * 60 + m) < 1020;
 }
 
+// ── WEBSOCKET ────────────────────────────────────────────────
 wss.on('connection', (ws) => {
   clients.add(ws);
   console.log(`Connected. Total: ${clients.size}`);
+
+  // Send current waiting queue to new connection
+  pool.query('SELECT lead_id, lead_data, added_at FROM waiting_queue ORDER BY added_at ASC')
+    .then(result => {
+      if (result.rows.length > 0) {
+        ws.send(JSON.stringify({ type: 'waiting_queue_init', queue: result.rows }));
+      }
+    }).catch(err => console.error('Queue fetch error:', err));
+
   ws.on('close', () => clients.delete(ws));
-  ws.on('message', (data) => {
+  ws.on('message', async (data) => {
     try {
       const msg = JSON.parse(data);
+
       if (msg.type === 'claim') {
         const { leadId, repName } = msg;
         const now = Date.now();
@@ -130,10 +218,8 @@ wss.on('connection', (ws) => {
           ws.send(JSON.stringify({ type: 'claim_failed', leadId, claimedBy: claimedLeads[leadId] }));
         } else if (hasActive) {
           ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'active_lead', leadId }));
-          console.log(`${repName} blocked — already has active lead ${repActiveLeads[repName]}`);
         } else if (now - lastClaim < COOLDOWN_MS) {
           ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'cooldown', secondsLeft, leadId }));
-          console.log(`${repName} blocked — cooldown ${secondsLeft}s remaining`);
         } else {
           claimedLeads[leadId] = repName;
           repCooldowns[repName] = now;
@@ -141,24 +227,67 @@ wss.on('connection', (ws) => {
           const lead = leadData[leadId];
           ws.send(JSON.stringify({ type: 'claim_success', leadId, lead }));
           broadcastAll({ type: 'lead_claimed', leadId, claimedBy: repName });
+          // remove from waiting queue
+          await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [leadId]);
+          // log event
+          await pool.query(
+            'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
+            [leadId, 'claimed', repName]
+          );
           console.log(`Lead ${leadId} claimed by ${repName}`);
         }
       }
+
       if (msg.type === 'dispose') {
         const { leadId, repName, disposition, notes } = msg;
         const lead = leadData[leadId] || {};
         handleDisposition({ lead, disposition, notes, repName });
-        // clear the rep's active lead lock so they can claim again
         if (repActiveLeads[repName] === leadId) delete repActiveLeads[repName];
         broadcastAll({ type: 'lead_disposed', leadId, disposition, claimedBy: repName });
-        console.log(`Disposed ${leadId}: ${disposition}`);
+        await pool.query(
+          'INSERT INTO lead_events (lead_id, event_type, rep_name, disposition, notes) VALUES ($1, $2, $3, $4, $5)',
+          [leadId, 'disposed', repName, disposition, notes]
+        );
+        console.log(`Disposed ${leadId}: ${disposition} by ${repName}`);
       }
+
+      if (msg.type === 'pass') {
+        const { leadId, lead } = msg;
+        await addToWaitingQueue(leadId, lead);
+        await pool.query(
+          'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
+          [leadId, 'passed', msg.repName || 'unknown']
+        );
+      }
+
+      if (msg.type === 'expire') {
+        const { leadId, lead } = msg;
+        await addToWaitingQueue(leadId, lead);
+        await pool.query(
+          'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
+          [leadId, 'expired', 'system']
+        );
+      }
+
     } catch (err) {
       console.error('Message error:', err);
     }
   });
 });
 
+async function addToWaitingQueue(leadId, lead) {
+  try {
+    await pool.query(
+      'INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO NOTHING',
+      [leadId, JSON.stringify(lead)]
+    );
+    broadcastAll({ type: 'lead_waiting', leadId, lead, addedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('Waiting queue error:', err);
+  }
+}
+
+// ── DISPOSITION ROUTING ──────────────────────────────────────
 async function handleDisposition({ lead, disposition, notes, repName }) {
   const payload = { ...lead, notes, disposition, repName, disposedAt: new Date().toISOString() };
   if (['imn_app_taken', 'imn_app_sent'].includes(disposition)) {
@@ -166,7 +295,6 @@ async function handleDisposition({ lead, disposition, notes, repName }) {
   } else if (['left_message', 'no_answer', 'in_market_later'].includes(disposition)) {
     await sendToZapier(process.env.ZAPIER_VANILLASOFT_WEBHOOK, payload);
   }
-  // not_qualified, not_interested, wrong_number → archive only (no webhook)
 }
 
 async function sendToZapier(webhookUrl, payload) {
@@ -182,7 +310,8 @@ async function sendToZapier(webhookUrl, payload) {
   }
 }
 
-app.post('/webhook/lead', (req, res) => {
+// ── LEAD WEBHOOK ─────────────────────────────────────────────
+app.post('/webhook/lead', async (req, res) => {
   const body = req.body;
   const phone = body.phone_number || body.phone || '';
   const campaignName = (body.campaign_name || '').toLowerCase();
@@ -211,11 +340,224 @@ app.post('/webhook/lead', (req, res) => {
   };
 
   leadData[lead.id] = lead;
+
+  // Save to DB
+  try {
+    await pool.query(`
+      INSERT INTO leads (id, lead_type, first_name, last_name, phone, email, company_name, state,
+        timezone, within_calling_hours, qualify_amount, timeline, time_in_business, monthly_revenue,
+        funds_used_for, conducts_business, campaign_name, form_name)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+    `, [lead.id, lead.leadType, lead.firstName, lead.lastName, lead.phone, lead.email,
+        lead.companyName, lead.state, lead.timezone, lead.withinCallingHours,
+        lead.qualifyAmount, lead.timeline, lead.timeInBusiness, lead.monthlyRevenue,
+        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName]);
+  } catch (err) {
+    console.error('DB insert error:', err);
+  }
+
   console.log(`New lead: ${lead.id} | ${leadType} | ${withinHours ? 'in hours' : 'OUTSIDE hours'} | ${tz}`);
   broadcastAll({ type: 'new_lead', lead: { id: lead.id, leadType, withinCallingHours: withinHours, timezone: tz } });
   res.json({ success: true, leadId: lead.id });
 });
 
+// ── ADMIN AUTH ───────────────────────────────────────────────
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+async function requireAdmin(req, res, next) {
+  const token = req.headers['x-admin-token'];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await pool.query(
+    'SELECT a.* FROM admin_sessions s JOIN admins a ON s.admin_id = a.id WHERE s.token = $1 AND s.expires_at > NOW()',
+    [token]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Session expired' });
+  req.admin = result.rows[0];
+  next();
+}
+
+async function requireSuperAdmin(req, res, next) {
+  await requireAdmin(req, res, () => {
+    if (!req.admin.is_super_admin) return res.status(403).json({ error: 'Super admin required' });
+    next();
+  });
+}
+
+// Admin login
+app.post('/admin/login', async (req, res) => {
+  const { username, password } = req.body;
+  const hash = hashPassword(password);
+  const result = await pool.query(
+    'SELECT * FROM admins WHERE username = $1 AND password_hash = $2',
+    [username, hash]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+  const admin = result.rows[0];
+  const token = crypto.randomBytes(32).toString('hex');
+  await pool.query(
+    'INSERT INTO admin_sessions (token, admin_id) VALUES ($1, $2)',
+    [token, admin.id]
+  );
+  res.json({ token, username: admin.username, isSuperAdmin: admin.is_super_admin });
+});
+
+// Get all admins (super admin only)
+app.get('/admin/admins', requireSuperAdmin, async (req, res) => {
+  const result = await pool.query('SELECT id, username, is_super_admin, created_at FROM admins ORDER BY created_at');
+  res.json(result.rows);
+});
+
+// Add admin (super admin only)
+app.post('/admin/admins', requireSuperAdmin, async (req, res) => {
+  const { username, password, isSuperAdmin } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  const hash = hashPassword(password);
+  try {
+    await pool.query(
+      'INSERT INTO admins (username, password_hash, is_super_admin) VALUES ($1, $2, $3)',
+      [username, hash, isSuperAdmin || false]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: 'Username already exists' });
+  }
+});
+
+// Delete admin (super admin only)
+app.delete('/admin/admins/:id', requireSuperAdmin, async (req, res) => {
+  if (req.admin.id === parseInt(req.params.id)) return res.status(400).json({ error: 'Cannot delete yourself' });
+  await pool.query('DELETE FROM admins WHERE id = $1', [req.params.id]);
+  res.json({ success: true });
+});
+
+// Change password
+app.post('/admin/change-password', requireAdmin, async (req, res) => {
+  const { newPassword } = req.body;
+  if (!newPassword) return res.status(400).json({ error: 'New password required' });
+  const hash = hashPassword(newPassword);
+  await pool.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [hash, req.admin.id]);
+  res.json({ success: true });
+});
+
+// ── REPORTING ENDPOINTS ──────────────────────────────────────
+
+// Summary stats
+app.get('/admin/stats', requireAdmin, async (req, res) => {
+  const { from, to } = req.query;
+  const dateFilter = from && to ? `AND l.received_at BETWEEN '${from}' AND '${to}'` : '';
+
+  const [totals, byRep, byDisposition, byLeadType, avgResponse, waiting] = await Promise.all([
+    pool.query(`SELECT COUNT(*) as total_leads FROM leads l WHERE 1=1 ${dateFilter}`),
+    pool.query(`
+      SELECT e.rep_name,
+        COUNT(DISTINCT CASE WHEN e.event_type = 'claimed' THEN e.lead_id END) as claimed,
+        COUNT(DISTINCT CASE WHEN e.event_type = 'disposed' THEN e.lead_id END) as disposed,
+        COUNT(DISTINCT CASE WHEN e.disposition IN ('imn_app_taken','imn_app_sent') THEN e.lead_id END) as positive,
+        COUNT(DISTINCT CASE WHEN e.disposition IN ('left_message','no_answer','in_market_later') THEN e.lead_id END) as vanillasoft,
+        COUNT(DISTINCT CASE WHEN e.disposition IN ('not_qualified','not_interested','wrong_number') THEN e.lead_id END) as negative
+      FROM lead_events e
+      JOIN leads l ON e.lead_id = l.id
+      WHERE e.event_type IN ('claimed','disposed') ${dateFilter.replace('l.received_at', 'l.received_at')}
+      GROUP BY e.rep_name ORDER BY claimed DESC
+    `),
+    pool.query(`
+      SELECT e.disposition, COUNT(*) as count
+      FROM lead_events e
+      JOIN leads l ON e.lead_id = l.id
+      WHERE e.event_type = 'disposed' ${dateFilter}
+      GROUP BY e.disposition ORDER BY count DESC
+    `),
+    pool.query(`
+      SELECT l.lead_type, COUNT(*) as count
+      FROM leads l WHERE 1=1 ${dateFilter}
+      GROUP BY l.lead_type
+    `),
+    pool.query(`
+      SELECT AVG(EXTRACT(EPOCH FROM (claim.created_at - l.received_at))) as avg_seconds
+      FROM lead_events claim
+      JOIN leads l ON claim.lead_id = l.id
+      WHERE claim.event_type = 'claimed' ${dateFilter}
+    `),
+    pool.query('SELECT COUNT(*) as count FROM waiting_queue'),
+  ]);
+
+  res.json({
+    totalLeads: parseInt(totals.rows[0].total_leads),
+    byRep: byRep.rows,
+    byDisposition: byDisposition.rows,
+    byLeadType: byLeadType.rows,
+    avgResponseSeconds: Math.round(avgResponse.rows[0].avg_seconds || 0),
+    waitingCount: parseInt(waiting.rows[0].count),
+  });
+});
+
+// Full lead list
+app.get('/admin/leads', requireAdmin, async (req, res) => {
+  const { from, to, rep, disposition } = req.query;
+  let where = 'WHERE 1=1';
+  const params = [];
+  if (from && to) { params.push(from, to); where += ` AND l.received_at BETWEEN $${params.length-1} AND $${params.length}`; }
+  if (rep) { params.push(rep); where += ` AND claim_event.rep_name = $${params.length}`; }
+  if (disposition) { params.push(disposition); where += ` AND dispose_event.disposition = $${params.length}`; }
+
+  const result = await pool.query(`
+    SELECT l.*,
+      claim_event.rep_name as claimed_by,
+      claim_event.created_at as claimed_at,
+      dispose_event.disposition,
+      dispose_event.notes,
+      dispose_event.created_at as disposed_at
+    FROM leads l
+    LEFT JOIN lead_events claim_event ON l.id = claim_event.lead_id AND claim_event.event_type = 'claimed'
+    LEFT JOIN lead_events dispose_event ON l.id = dispose_event.lead_id AND dispose_event.event_type = 'disposed'
+    ${where}
+    ORDER BY l.received_at DESC
+    LIMIT 500
+  `, params);
+  res.json(result.rows);
+});
+
+// CSV export
+app.get('/admin/export', requireAdmin, async (req, res) => {
+  const { from, to } = req.query;
+  const dateFilter = from && to ? `AND l.received_at BETWEEN '${from}' AND '${to}'` : '';
+  const result = await pool.query(`
+    SELECT l.received_at, l.lead_type, l.first_name, l.last_name, l.phone, l.email,
+      l.company_name, l.state, l.timezone, l.qualify_amount, l.timeline,
+      l.time_in_business, l.monthly_revenue, l.funds_used_for,
+      claim_event.rep_name as claimed_by, claim_event.created_at as claimed_at,
+      dispose_event.disposition, dispose_event.notes, dispose_event.created_at as disposed_at
+    FROM leads l
+    LEFT JOIN lead_events claim_event ON l.id = claim_event.lead_id AND claim_event.event_type = 'claimed'
+    LEFT JOIN lead_events dispose_event ON l.id = dispose_event.lead_id AND dispose_event.event_type = 'disposed'
+    WHERE 1=1 ${dateFilter}
+    ORDER BY l.received_at DESC
+  `);
+
+  const headers = ['Received','Lead Type','First Name','Last Name','Phone','Email','Company','State','Timezone',
+    'Qualify Amount','Timeline','Time in Business','Monthly Revenue','Funds Used For',
+    'Claimed By','Claimed At','Disposition','Notes','Disposed At'];
+  const rows = result.rows.map(r => [
+    r.received_at, r.lead_type, r.first_name, r.last_name, r.phone, r.email,
+    r.company_name, r.state, r.timezone, r.qualify_amount, r.timeline,
+    r.time_in_business, r.monthly_revenue, r.funds_used_for,
+    r.claimed_by, r.claimed_at, r.disposition, r.notes, r.disposed_at
+  ].map(v => `"${(v||'').toString().replace(/"/g,'""')}"`).join(','));
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=leads.csv');
+  res.send([headers.join(','), ...rows].join('\n'));
+});
+
+// Waiting queue
+app.get('/admin/waiting', requireAdmin, async (req, res) => {
+  const result = await pool.query('SELECT * FROM waiting_queue ORDER BY added_at ASC');
+  res.json(result.rows);
+});
+
+// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', connected: clients.size, leads: Object.keys(leadData).length });
 });
@@ -228,4 +570,9 @@ function broadcastAll(data) {
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server on port ${PORT}`));
+initDB().then(() => {
+  server.listen(PORT, () => console.log(`Server on port ${PORT}`));
+}).catch(err => {
+  console.error('DB init failed:', err);
+  process.exit(1);
+});
