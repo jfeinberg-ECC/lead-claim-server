@@ -189,7 +189,7 @@ app.post('/webhook/lead', (req, res) => {
     fundsUsedFor: body.funds_used_for || body.what_will_the_funds_be_used_for || '',
     conductsBusiness: body.conducts_business || body.how_do_you_conduct_business || '',
     campaignName: body.campaign_name || '',
-    formName: body.form_name || '',
+    formName: body.form_name || ''
   };
 
   leadData[lead.id] = lead;
