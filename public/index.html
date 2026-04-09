@@ -654,12 +654,17 @@
     if (!ws) return;
     // Notes required for dispositions where a conversation was had
     const requiresNote = ['imn_app_taken','imn_app_sent','in_market_later','not_qualified','not_interested','wrong_number'];
-    if (requiresNote.includes(disposition) && !notes.trim()) {
-      const notesEl = document.getElementById('notes-'+leadId);
+    const notesEl = document.getElementById('notes-'+leadId);
+    if (requiresNote.includes(disposition) && notesEl && !notes.trim()) {
       notesEl.focus();
       notesEl.style.borderColor = '#e74c3c';
+      notesEl.style.boxShadow = '0 0 0 3px rgba(231,76,60,0.15)';
       notesEl.placeholder = '⚠️ Notes are required for this disposition';
-      setTimeout(() => { notesEl.style.borderColor = ''; notesEl.placeholder = 'Add call notes here...'; }, 3000);
+      setTimeout(() => {
+        notesEl.style.borderColor = '';
+        notesEl.style.boxShadow = '';
+        notesEl.placeholder = 'Add call notes here...';
+      }, 3000);
       return;
     }
     ws.send(JSON.stringify({ type: 'dispose', leadId, repName, disposition, notes }));
