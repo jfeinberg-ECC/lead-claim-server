@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lead Claim Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #111; }
+    #login-screen {
+      position: fixed; inset: 0; background: #f5f5f5;
+      display: flex; align-items: center; justify-content: center; z-index: 200;
+    }
+    .login-card {
+      background: #fff; border-radius: 12px; border: 1px solid #e0e0e0;
+      padding: 2.5rem; width: 340px; text-align: center;
+    }
+    .login-card h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+    .login-card p { font-size: 14px; color: #666; margin-bottom: 1.5rem; }
+    .login-card input {
+      width: 100%; padding: 10px 14px; border: 1px solid #ddd;
+      border-radius: 8px; font-size: 15px; margin-bottom: 12px; outline: none;
+    }
+    .login-card input:focus { border-color: #1D9E75; }
+    .login-card button {
+      width: 100%; padding: 11px; background: #1D9E75; color: #fff;
+      border: none; border-radius: 8px; font-size: 15px; font-weight: 500;
+      cursor: pointer;
+    }
+    .login-card button:hover { background: #0F6E56; }
+    #dashboard { display: none; max-width: 860px; margin: 0 auto; padding: 1.5rem; }
+    .top-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+    .top-bar h1 { font-size: 20px; font-weight: 600; }
+    .conn-status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #666; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
+    .dot.live { background: #1D9E75; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .agent-bar {
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      background: #fff; border-radius: 10px; border: 1px solid #e8e8e8;
+      margin-bottom: 1.5rem;
+    }
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: #CECBF6; color: #3C3489;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 600;
+    }
+    .agent-name { font-size: 14px; font-weight: 500; }
+    .agent-sub { font-size: 12px; color: #888; }
+    .stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 10px; margin-bottom: 1.5rem;
+    }
+    .stat {
+      background: #fff; border-radius: 10px; border: 1px solid #e8e8e8;
+      padding: 14px 16px;
+    }
+    .stat-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+    .stat-val { font-size: 24px; font-weight: 600; }
+    .section-label { font-size: 12px; color: #888; font-weight: 500; letter-spacing: 0.04em; margin-bottom: 10px; text-transform: uppercase; }
+    .lead-list { display: flex; flex-direction: column; gap: 8px; }
+    .lead-card {
+      background: #fff; border: 1px solid #e8e8e8; border-radius: 10px;
+      padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .lead-card.faded { opacity: 0.5; }
+    .lead-info { display: flex; align-items: center; gap: 12px; }
+    .lead-avatar { width: 38px; height: 38px; border-radius: 50%; background: #B5D4F4; color: #0C447C; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+    .lead-phone { font-size: 14px; font-weight: 500; }
+    .lead-time { font-size: 11px; color: #aaa; margin-left: 6px; }
+    .lead-msg { font-size: 12px; color: #666; margin-top: 3px; font-style: italic; max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .badge-mine { font-size: 12px; color: #0F6E56; background: #E1F5EE; padding: 5px 12px; border-radius: 8px; white-space: nowrap; }
+    .badge-other { font-size: 12px; color: #888; background: #f0f0f0; padding: 5px 12px; border-radius: 8px; white-space: nowrap; }
+    .empty-state { text-align: center; padding: 3rem; color: #aaa; font-size: 14px; }
+    .popup-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .popup-overlay.active { opacity: 1; pointer-events: all; }
+    .popup {
+      background: #fff; border-radius: 16px; border: 1px solid #e0e0e0;
+      padding: 2rem; max-width: 380px; width: 90%; text-align: center;
+    }
+    .popup-badge {
+      display: inline-block; background: #FAECE7; color: #993C1D;
+      font-size: 12px; font-weight: 600; padding: 4px 12px;
+      border-radius: 8px; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .popup-phone { font-size: 26px; font-weight: 600; margin-bottom: 4px; }
+    .popup-msg {
+      font-size: 14px; color: #555; background: #f8f8f8;
+      border-radius: 8px; padding: 10px 14px; margin: 1rem 0;
+      line-height: 1.5; font-style: italic;
+    }
+    .popup-timer { font-size: 13px; color: #888; margin-bottom: 8px; }
+    .timer-bar-wrap { height: 4px; background: #eee; border-radius: 2px; margin-bottom: 1.5rem; overflow: hidden; }
+    .timer-bar { height: 100%; background: #D85A30; border-radius: 2px; transition: width 1s linear; }
+    .popup-claim-btn {
+      width: 100%; padding: 13px; background: #1D9E75; color: #fff;
+      border: none; border-radius: 10px; font-size: 16px; font-weight: 600;
+      cursor: pointer; margin-bottom: 10px; transition: background 0.15s;
+    }
+    .popup-claim-btn:hover { background: #0F6E56; }
+    .popup-claim-btn:disabled { background: #aaa; cursor: default; }
+    .popup-dismiss { font-size: 13px; color: #aaa; cursor: pointer; text-decoration: underline; }
+    .popup-result { font-size: 15px; font-weight: 500; margin-bottom: 1rem; }
+    .popup-result.success { color: #0F6E56; }
+    .popup-result.failed { color: #993C1D; }
+  </style>
+</head>
+<body>
+<div id="login-screen">
+  <div class="login-card">
+    <h1>Lead Claim Board</h1>
+    <p>Enter your name to go live</p>
+    <input type="text" id="name-input" placeholder="Your first name" maxlength="30" />
+    <button onclick="login()">Go Live</button>
+  </div>
+</div>
+<div id="dashboard">
+  <div class="top-bar">
+    <h1>Lead Claim Board</h1>
+    <div class="conn-status"><div class="dot" id="conn-dot"></div><span id="conn-label">Connecting...</span></div>
+  </div>
+  <div class="agent-bar">
+    <div class="avatar" id="user-avatar">?</div>
+    <div>
+      <div class="agent-name" id="user-name-display">...</div>
+      <div class="agent-sub" id="shift-time">Shift started ...</div>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-label">You claimed today</div><div class="stat-val" id="s-mine">0</div></div>
+    <div class="stat"><div class="stat-label">Team total today</div><div class="stat-val" id="s-team">0</div></div>
+    <div class="stat"><div class="stat-label">Waiting now</div><div class="stat-val" id="s-waiting">0</div></div>
+  </div>
+  <div class="section-label">Recent leads</div>
+  <div class="lead-list" id="lead-list">
+    <div class="empty-state" id="empty-msg">No leads yet — you'll hear a chime when one comes in.</div>
+  </div>
+</div>
+<div class="popup-overlay" id="popup-overlay">
+  <div class="popup">
+    <div class="popup-badge">New text reply</div>
+    <div class="popup-phone" id="p-phone">(603) 555-0000</div>
+    <div class="popup-msg" id="p-msg">"..."</div>
+    <div class="popup-timer">Expires in <span id="p-countdown">30</span>s</div>
+    <div class="timer-bar-wrap"><div class="timer-bar" id="p-bar"></div></div>
+    <div class="popup-result" id="p-result"></div>
+    <button class="popup-claim-btn" id="p-btn" onclick="claimLead()">Claim this lead</button>
+    <div class="popup-dismiss" onclick="dismissPopup()">Pass</div>
+  </div>
+</div>
+<script>
+  const SERVER_URL = 'https://lead-claim-server-production.up.railway.app';
+  const WS_URL = SERVER_URL.replace('https', 'wss');
+  let repName = '', ws = null, currentLeadId = null, timerInterval = null;
+  let timeLeft = 30, myClaimed = 0, teamTotal = 0, pendingCount = 0;
+
+  function login() {
+    const input = document.getElementById('name-input').value.trim();
+    if (!input) return;
+    repName = input;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('user-name-display').textContent = repName;
+    document.getElementById('user-avatar').textContent = repName.substring(0, 2).toUpperCase();
+    const now = new Date();
+    document.getElementById('shift-time').textContent = 'Shift started ' + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    connectWS();
+  }
+  document.getElementById('name-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+
+  function connectWS() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = () => { document.getElementById('conn-dot').className = 'dot live'; document.getElementById('conn-label').textContent = 'Live'; };
+    ws.onclose = () => { document.getElementById('conn-dot').className = 'dot'; document.getElementById('conn-label').textContent = 'Reconnecting...'; setTimeout(connectWS, 3000); };
+    ws.onerror = () => ws.close();
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'new_lead') { showPopup(msg.lead); pendingCount++; updateStats(); }
+      if (msg.type === 'lead_claimed') {
+        if (msg.leadId === currentLeadId && msg.claimedBy !== repName) showClaimResult(false, msg.claimedBy);
+        markLeadClaimed(msg.leadId, msg.claimedBy);
+        teamTotal++; pendingCount = Math.max(0, pendingCount - 1); updateStats();
+      }
+      if (msg.type === 'claim_failed') showClaimResult(false, msg.claimedBy);
+    };
+  }
+
+  function showPopup(lead) {
+    currentLeadId = lead.id;
+    document.getElementById('p-phone').textContent = formatPhone(lead.phone);
+    document.getElementById('p-msg').textContent = '"' + lead.message + '"';
+    document.getElementById('p-result').textContent = '';
+    document.getElementById('p-result').className = 'popup-result';
+    document.getElementById('p-btn').textContent = 'Claim this lead';
+    document.getElementById('p-btn').disabled = false;
+    document.getElementById('p-btn').style.background = '';
+    document.getElementById('popup-overlay').classList.add('active');
+    timeLeft = 30;
+    document.getElementById('p-countdown').textContent = timeLeft;
+    document.getElementById('p-bar').style.width = '100%';
+    try { document.getElementById('chime').play(); } catch(e) {}
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      document.getElementById('p-countdown').textContent = timeLeft;
+      document.getElementById('p-bar').style.width = (timeLeft / 30 * 100) + '%';
+      if (timeLeft <= 0) { clearInterval(timerInterval); document.getElementById('p-btn').textContent = 'Expired'; document.getElementById('p-btn').disabled = true; setTimeout(dismissPopup, 2000); }
+    }, 1000);
+  }
+
+  function claimLead() {
+    if (!currentLeadId || !ws) return;
+    ws.send(JSON.stringify({ type: 'claim', leadId: currentLeadId, repName }));
+    document.getElementById('p-btn').textContent = 'Claiming...';
+    document.getElementById('p-btn').disabled = true;
+    clearInterval(timerInterval);
+    setTimeout(() => {
+      if (document.getElementById('p-btn').textContent === 'Claiming...') {
+        showClaimResult(true); markLeadClaimed(currentLeadId, repName);
+        myClaimed++; teamTotal++; pendingCount = Math.max(0, pendingCount - 1); updateStats();
+      }
+    }, 800);
+  }
+
+  function showClaimResult(success, claimedBy) {
+    const result = document.getElementById('p-result');
+    const btn = document.getElementById('p-btn');
+    if (success) { result.textContent = 'You got it! Look them up in VanillaSoft.'; result.className = 'popup-result success'; btn.textContent = 'Claimed!'; btn.style.background = '#0F6E56'; }
+    else { result.textContent = (claimedBy || 'Someone') + ' claimed this first.'; result.className = 'popup-result failed'; btn.textContent = 'Too slow this time'; btn.style.background = '#aaa'; }
+    btn.disabled = true;
+    setTimeout(dismissPopup, 3000);
+  }
+
+  function dismissPopup() {
+    clearInterval(timerInterval);
+    document.getElementById('popup-overlay').classList.remove('active');
+    document.getElementById('p-btn').style.background = '';
+    currentLeadId = null;
+  }
+
+  function markLeadClaimed(leadId, claimedBy) {
+    addLeadToList(leadId, claimedBy);
+  }
+
+  function addLeadToList(leadId, claimedBy) {
+    const emptyMsg = document.getElementById('empty-msg');
+    if (emptyMsg) emptyMsg.style.display = 'none';
+    if (document.getElementById('card-' + leadId)) return;
+    const list = document.getElementById('lead-list');
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const mine = claimedBy === repName;
+    const card = document.createElement('div');
+    card.className = 'lead-card faded';
+    card.id = 'card-' + leadId;
+    card.innerHTML = `<div class="lead-info"><div class="lead-avatar">VS</div><div><div class="lead-phone">Look up in VanillaSoft <span class="lead-time">${timeStr}</span></div><div class="lead-msg">Claimed by ${claimedBy}</div></div></div><span class="${mine ? 'badge-mine' : 'badge-other'}">${mine ? 'You claimed' : 'Claimed by ' + claimedBy}</span>`;
+    list.insertBefore(card, list.firstChild);
+  }
+
+  function updateStats() {
+    document.getElementById('s-mine').textContent = myClaimed;
+    document.getElementById('s-team').textContent = teamTotal;
+    document.getElementById('s-waiting').textContent = pendingCount;
+  }
+
+  function formatPhone(phone) {
+    const cleaned = ('' + phone).replace(/\D/g, '');
+    const match = cleaned.match(/^1?(\d{3})(\d{3})(\d{4})$/);
+    if (match) return '(' + match[1] + ') ' + match[2] + '-' + match[3];
+    return phone;
+  }
+</script>
+<audio id="chime" preload="auto"></audio>
+</body>
+</html>
