@@ -77,8 +77,11 @@
     .lead-meta { font-size: 12px; color: #aaa; }
     .lead-card-body { padding: 16px; }
     .lead-name { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
-    .lead-phone { font-size: 15px; color: #378ADD; margin-bottom: 12px; display: inline-block; text-decoration: none; cursor: pointer; }
-    .lead-phone:hover { text-decoration: underline; color: #1D9E75; }
+    .lead-phone { font-size: 15px; color: #378ADD; margin-bottom: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .lead-phone:hover { color: #1D9E75; }
+    .copy-hint { font-size: 12px; opacity: 0.5; }
+    .copy-toast { position: fixed; bottom: 80px; right: 20px; background: #333; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    .copy-toast.show { opacity: 1; }
     .lead-tz { font-size: 12px; color: #888; margin-bottom: 12px; }
     .lead-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
     .lead-field { background: #f8f8f8; border-radius: 8px; padding: 8px 12px; }
@@ -222,6 +225,7 @@
 </div>
 
 <audio id="chime" preload="auto"></audio>
+<div class="copy-toast" id="copy-toast">📋 Number copied!</div>
 
 <script>
   const SERVER_URL = 'https://lead-claim-server-production.up.railway.app';
@@ -590,7 +594,7 @@
       </div>
       <div class="lead-card-body">
         <div class="lead-name">${lead.firstName} ${lead.lastName}</div>
-        <a class="lead-phone" href="tel:${lead.phone}" title="Click to call with Vonage">${formatPhone(lead.phone)}</a>
+        <div class="lead-phone" onclick="copyPhone('${lead.phone}')" title="Click to copy number">${formatPhone(lead.phone)} <span class="copy-hint">📋</span></div>
         <div class="lead-tz">${lead.email}${lead.state ? ' · '+lead.state : ''}</div>
         <div class="lead-fields">
           ${field('Company', lead.companyName)}
@@ -694,6 +698,15 @@
     const d = c.startsWith('1') ? c.slice(1) : c;
     const m = d.match(/^(\d{3})(\d{3})(\d{4})$/);
     return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
+  }
+
+  function copyPhone(phone) {
+    const clean = (phone || '').replace(/\D/g, '');
+    navigator.clipboard.writeText(clean).then(() => {
+      const toast = document.getElementById('copy-toast');
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    });
   }
 
   function tzLabel(tz) {
