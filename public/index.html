@@ -652,6 +652,16 @@
   function dispose(leadId, disposition) {
     const notes = document.getElementById('notes-'+leadId)?.value || '';
     if (!ws) return;
+    // Notes required for dispositions where a conversation was had
+    const requiresNote = ['imn_app_taken','imn_app_sent','in_market_later','not_qualified','not_interested','wrong_number'];
+    if (requiresNote.includes(disposition) && !notes.trim()) {
+      const notesEl = document.getElementById('notes-'+leadId);
+      notesEl.focus();
+      notesEl.style.borderColor = '#e74c3c';
+      notesEl.placeholder = '⚠️ Notes are required for this disposition';
+      setTimeout(() => { notesEl.style.borderColor = ''; notesEl.placeholder = 'Add call notes here...'; }, 3000);
+      return;
+    }
     ws.send(JSON.stringify({ type: 'dispose', leadId, repName, disposition, notes }));
     hasActiveLead = false;
     window._activeLeadData = null;
