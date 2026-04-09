@@ -243,6 +243,12 @@
     localStorage.setItem(LS_ACTIVE, JSON.stringify(hasActiveLead ? (window._activeLeadData || null) : null));
     localStorage.setItem(LS_WAITING, JSON.stringify(waitingQueue));
     localStorage.setItem(LS_STATS, JSON.stringify({ myClaimed, teamTotal, countPositive, countSalesforce, countNegative }));
+    // save cooldown end time so refresh can restore it
+    if (onCooldown && cooldownLeft > 0) {
+      localStorage.setItem('lcb_cooldownUntil', Date.now() + cooldownLeft * 1000);
+    } else {
+      localStorage.removeItem('lcb_cooldownUntil');
+    }
   }
 
   function loadState() {
@@ -283,7 +289,7 @@
       body: `${tzLabel(lead.timezone)} timezone · Click to claim`,
       icon: 'https://lead-claim-server-production.up.railway.app/favicon.ico',
       requireInteraction: true,  // stays until dismissed
-      tag: 'new-lead'            // replaces previous notif instead of stacking
+      tag: 'lead-' + lead.id     // unique per lead so none get swallowed
     });
     n.onclick = () => { window.focus(); n.close(); };
   }
@@ -349,10 +355,15 @@
       const msg = JSON.parse(event.data);
 
       if (msg.type === 'new_lead') {
-        pending++;
-        updateStats();
-        showPopup(msg.lead);
         sendNotification(msg.lead);
+        if (onCooldown || hasActiveLead) {
+          // rep is busy — drop straight into waiting queue
+          addToWaiting(msg.lead);
+        } else {
+          pending++;
+          updateStats();
+          showPopup(msg.lead);
+        }
       }
       if (msg.type === 'claim_success') {
         window._activeLeadData = msg.lead;
@@ -372,6 +383,19 @@
         pending = Math.max(0, pending - 1);
         updateStats();
         saveState();
+      }
+      if (msg.type === 'claim_blocked') {
+        const btn = document.getElementById('p-btn');
+        const r = document.getElementById('p-result');
+        if (msg.reason === 'cooldown') {
+          r.textContent = `Cooldown — ${msg.secondsLeft}s remaining`;
+          r.className = 'popup-result failed';
+        } else if (msg.reason === 'active_lead') {
+          r.textContent = 'Dispose your current lead first.';
+          r.className = 'popup-result failed';
+        }
+        if (btn) { btn.textContent = 'Blocked'; btn.style.background = '#aaa'; btn.disabled = true; }
+        setTimeout(dismissPopup, 2000);
       }
       if (msg.type === 'lead_claimed') {
         teamTotal++;
