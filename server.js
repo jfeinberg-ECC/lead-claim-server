@@ -429,14 +429,32 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'pass') {
         const { leadId, lead } = msg;
-        // Release active lead lock for this rep
-        if (msg.repName && repActiveLeads[msg.repName] === leadId) {
-          delete repActiveLeads[msg.repName];
+        let repName = msg.repName;
+        // Verify token for consistent naming
+        if (msg.repToken) {
+          try {
+            const tr = await pool.query(
+              'SELECT r.name FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW()',
+              [msg.repToken]
+            );
+            if (tr.rows.length > 0) repName = tr.rows[0].name;
+          } catch(e) {}
         }
+        // Only pass if NOT already claimed by someone else
+        if (claimedLeads[leadId] && claimedLeads[leadId] !== repName) {
+          console.log(`Pass rejected — lead ${leadId} already claimed by ${claimedLeads[leadId]}`);
+          return;
+        }
+        // Release active lead lock for this rep
+        if (repName && repActiveLeads[repName] === leadId) {
+          delete repActiveLeads[repName];
+        }
+        // Remove from claimedLeads so it can be claimed again
+        delete claimedLeads[leadId];
         await addToWaitingQueue(leadId, lead);
         await pool.query(
           'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
-          [leadId, 'passed', msg.repName || 'unknown']
+          [leadId, 'passed', repName || 'unknown']
         );
       }
 
@@ -515,6 +533,11 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'expire') {
         const { leadId } = msg;
+        // Don't expire if already claimed by someone
+        if (claimedLeads[leadId]) {
+          console.log(`Expire ignored — lead ${leadId} already claimed by ${claimedLeads[leadId]}`);
+          return;
+        }
         let lead = msg.lead;
         // Always fetch full lead from DB for queue storage
         try {
