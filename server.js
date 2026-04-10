@@ -1081,6 +1081,13 @@ app.post('/admin/switch-to-rep', requireAdmin, async (req, res) => {
   res.json({ token, repName });
 });
 
+// Manual queue recovery trigger (admin only)
+app.post('/admin/recover-queue', requireAdmin, async (req, res) => {
+  await recoverOrphanedLeads();
+  const result = await pool.query('SELECT COUNT(*) as count FROM waiting_queue');
+  res.json({ success: true, queueCount: parseInt(result.rows[0].count) });
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', connected: clients.size, leads: Object.keys(leadData).length });
 });
@@ -1189,14 +1196,17 @@ async function recoverOrphanedLeads() {
       SELECT l.* FROM leads l
       WHERE l.received_at > NOW() - INTERVAL '30 days'
       AND NOT EXISTS (
-        SELECT 1 FROM lead_events e WHERE e.lead_id = l.id AND e.event_type IN ('disposed', 'timeout')
+        SELECT 1 FROM lead_events e 
+        WHERE e.lead_id = l.id AND e.event_type IN ('disposed', 'timeout')
       )
       AND NOT EXISTS (
-        SELECT 1 FROM lead_events e2 WHERE e2.lead_id = l.id AND e2.event_type = 'claimed'
-        AND NOT EXISTS (
-          SELECT 1 FROM lead_events d WHERE d.lead_id = l.id AND d.event_type IN ('disposed','timeout','passed')
-        )
+        SELECT 1 FROM lead_events e2 
+        WHERE e2.lead_id = l.id AND e2.event_type = 'claimed'
         AND e2.created_at > NOW() - INTERVAL '2 hours'
+        AND NOT EXISTS (
+          SELECT 1 FROM lead_events d 
+          WHERE d.lead_id = l.id AND d.event_type IN ('disposed','timeout','passed')
+        )
       )
       AND NOT EXISTS (
         SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = l.id
