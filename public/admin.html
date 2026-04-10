@@ -3,68 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lead Claim — Admin</title>
+  <title>Voltlead — Admin</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #111; }
-
-    /* LOGIN */
     #login-screen { position: fixed; inset: 0; background: #f0f2f5; display: flex; align-items: center; justify-content: center; z-index: 200; }
-    .login-card { background: #fff; border-radius: 12px; border: 1px solid #e0e0e0; padding: 2.5rem; width: 360px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-    .login-card h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
-    .login-card p { font-size: 14px; color: #888; margin-bottom: 1.5rem; }
-    .login-card input { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-bottom: 10px; outline: none; }
+    .login-card { background: #fff; border-radius: 14px; border: 1px solid #e0e0e0; padding: 2.5rem; width: 360px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.07); }
+    .login-logo { font-size: 26px; font-weight: 800; color: #1D9E75; margin-bottom: 4px; }
+    .login-logo span { color: #111; }
+    .login-sub { font-size: 13px; color: #888; margin-bottom: 1.5rem; }
+    .login-card input { width: 100%; padding: 11px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-bottom: 10px; outline: none; }
     .login-card input:focus { border-color: #1D9E75; }
-    .login-card button { width: 100%; padding: 11px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; }
+    .login-card button { width: 100%; padding: 12px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
     .login-card button:hover { background: #0F6E56; }
     .login-error { color: #c0392b; font-size: 13px; margin-top: 8px; }
-
-    /* LAYOUT */
     #app { display: none; }
-    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 220px; background: #1a1a2e; color: #fff; padding: 1.5rem 0; }
-    .sidebar-logo { padding: 0 1.5rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 1rem; }
-    .sidebar-logo h2 { font-size: 16px; font-weight: 700; color: #1D9E75; }
-    .sidebar-logo p { font-size: 12px; color: #888; margin-top: 2px; }
-    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 1.5rem; font-size: 14px; color: #aaa; cursor: pointer; transition: all 0.15s; }
+    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 220px; background: #0d1117; color: #fff; padding: 1.5rem 0; }
+    .sidebar-logo { padding: 0 1.5rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 1rem; }
+    .sidebar-logo h2 { font-size: 18px; font-weight: 800; color: #1D9E75; }
+    .sidebar-logo h2 span { color: #fff; }
+    .sidebar-logo p { font-size: 12px; color: #555; margin-top: 2px; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 1.5rem; font-size: 14px; color: #888; cursor: pointer; transition: all 0.15s; }
     .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
     .nav-item.active { background: rgba(29,158,117,0.15); color: #1D9E75; border-right: 3px solid #1D9E75; }
-    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
-    .sidebar-footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 1rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.1); }
-    .sidebar-user { font-size: 13px; color: #888; margin-bottom: 8px; }
+    .sidebar-footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 1rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.08); }
+    .sidebar-user { font-size: 13px; color: #555; margin-bottom: 8px; }
     .sidebar-user strong { color: #fff; display: block; }
-    .logout-btn { width: 100%; padding: 8px; background: rgba(255,255,255,0.05); color: #aaa; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .logout-btn { width: 100%; padding: 8px; background: rgba(255,255,255,0.05); color: #888; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; font-size: 13px; cursor: pointer; }
     .logout-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-
     .main { margin-left: 220px; padding: 2rem; min-height: 100vh; }
     .page { display: none; }
     .page.active { display: block; }
     .page-title { font-size: 22px; font-weight: 700; margin-bottom: 1.5rem; }
-
-    /* DATE FILTER */
     .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap; }
-    .filter-bar input[type=date] { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: #fff; }
-    .filter-bar select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: #fff; }
+    .filter-bar input[type=date], .filter-bar select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: #fff; }
     .btn { padding: 8px 18px; border-radius: 8px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; }
-    .btn-primary { background: #1D9E75; color: #fff; }
-    .btn-primary:hover { background: #0F6E56; }
-    .btn-outline { background: #fff; color: #333; border: 1px solid #ddd; }
-    .btn-outline:hover { background: #f5f5f5; }
-    .btn-danger { background: #e74c3c; color: #fff; }
-    .btn-danger:hover { background: #c0392b; }
+    .btn-primary { background: #1D9E75; color: #fff; } .btn-primary:hover { background: #0F6E56; }
+    .btn-outline { background: #fff; color: #333; border: 1px solid #ddd; } .btn-outline:hover { background: #f5f5f5; }
+    .btn-danger { background: #e74c3c; color: #fff; } .btn-danger:hover { background: #c0392b; }
+    .btn-warn { background: #F5A623; color: #fff; } .btn-warn:hover { background: #D4881A; }
     .btn-sm { padding: 5px 12px; font-size: 12px; }
-
-    /* STAT CARDS */
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 1.5rem; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 1.5rem; }
     .stat-card { background: #fff; border-radius: 12px; border: 1px solid #e8e8e8; padding: 16px 20px; }
     .stat-card .label { font-size: 12px; color: #888; margin-bottom: 6px; }
     .stat-card .value { font-size: 28px; font-weight: 700; }
     .stat-card .sub { font-size: 12px; color: #aaa; margin-top: 2px; }
-    .value.green { color: #0F6E56; }
-    .value.blue { color: #185FA5; }
-    .value.red { color: #993C1D; }
-    .value.orange { color: #D4881A; }
-
-    /* TABLES */
+    .value.green { color: #0F6E56; } .value.blue { color: #185FA5; } .value.red { color: #993C1D; } .value.orange { color: #D4881A; }
     .table-card { background: #fff; border-radius: 12px; border: 1px solid #e8e8e8; overflow: hidden; margin-bottom: 1.5rem; }
     .table-card-header { padding: 14px 20px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; }
     .table-card-header h3 { font-size: 15px; font-weight: 600; }
@@ -77,48 +61,50 @@
     .badge-positive { background: #E1F5EE; color: #085041; }
     .badge-vs { background: #E6F1FB; color: #0C447C; }
     .badge-negative { background: #FCEBEB; color: #791F1F; }
-    .badge-waiting { background: #FFF3CD; color: #856404; }
     .badge-unclaimed { background: #f0f0f0; color: #888; }
-
-    /* REP LEADERBOARD */
-    .rep-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #f0f0f0; }
+    .badge-active { background: #E1F5EE; color: #085041; }
+    .badge-inactive { background: #f0f0f0; color: #888; }
+    .rep-row { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #f0f0f0; }
     .rep-row:last-child { border-bottom: none; }
     .rep-rank { font-size: 18px; font-weight: 700; color: #ddd; width: 28px; }
     .rep-rank.top { color: #F5A623; }
-    .rep-avatar { width: 36px; height: 36px; border-radius: 50%; background: #CECBF6; color: #3C3489; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+    .rep-avatar { width: 36px; height: 36px; border-radius: 50%; background: #CECBF6; color: #3C3489; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; overflow: hidden; }
+    .rep-avatar img { width: 100%; height: 100%; object-fit: cover; }
     .rep-name { font-size: 14px; font-weight: 600; flex: 1; }
     .rep-stats { display: flex; gap: 16px; font-size: 12px; }
     .rep-stat { text-align: center; }
     .rep-stat .val { font-weight: 700; font-size: 16px; }
     .rep-stat .lbl { color: #aaa; }
-
-    /* ADMIN MANAGEMENT */
+    .form-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; padding: 20px; margin-bottom: 1.5rem; }
+    .form-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group label { font-size: 12px; color: #666; font-weight: 500; }
+    .form-group input, .form-group select { padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; width: 100%; }
+    .form-group input:focus, .form-group select:focus { border-color: #1D9E75; }
+    .form-row-inline { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
     .admin-list { display: flex; flex-direction: column; gap: 10px; }
     .admin-item { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; gap: 12px; }
     .admin-item-info { flex: 1; }
     .admin-item-name { font-size: 14px; font-weight: 600; }
     .admin-item-sub { font-size: 12px; color: #888; }
     .super-badge { background: #FFF3CD; color: #856404; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; margin-left: 6px; }
-
-    .add-admin-form { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; padding: 20px; margin-bottom: 1.5rem; }
-    .add-admin-form h3 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
-    .form-group { display: flex; flex-direction: column; gap: 5px; }
-    .form-group label { font-size: 12px; color: #666; font-weight: 500; }
-    .form-group input { padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
-    .form-group input:focus { border-color: #1D9E75; }
-    .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 6px; }
-
     .empty-msg { text-align: center; padding: 2rem; color: #aaa; font-size: 14px; }
     .loading { text-align: center; padding: 2rem; color: #aaa; }
+    .form-msg { font-size: 13px; margin-top: 8px; }
+    .form-msg.success { color: #0F6E56; }
+    .form-msg.error { color: #c0392b; }
+    .rep-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .delete-btn { background: none; border: none; cursor: pointer; color: #e74c3c; font-size: 16px; padding: 2px 6px; border-radius: 4px; }
+    .delete-btn:hover { background: #FCEBEB; }
   </style>
 </head>
 <body>
 
 <div id="login-screen">
   <div class="login-card">
-    <h1>🔐 Admin Login</h1>
-    <p>Lead Claim Board — Admin Dashboard</p>
+    <div class="login-logo">⚡ Volt<span>lead</span></div>
+    <div class="login-sub">Admin Dashboard</div>
     <input type="text" id="login-user" placeholder="Username" />
     <input type="password" id="login-pass" placeholder="Password" />
     <button onclick="doLogin()">Sign In</button>
@@ -129,14 +115,16 @@
 <div id="app">
   <div class="sidebar">
     <div class="sidebar-logo">
-      <h2>Lead Claim</h2>
+      <h2>⚡ Volt<span>lead</span></h2>
       <p>Admin Dashboard</p>
     </div>
-    <div class="nav-item active" onclick="showPage('dashboard')"><span class="icon">📊</span> Dashboard</div>
-    <div class="nav-item" onclick="showPage('leads')"><span class="icon">📋</span> All Leads</div>
-    <div class="nav-item" onclick="showPage('waiting')"><span class="icon">⏳</span> Waiting Queue</div>
-    <div class="nav-item" onclick="showPage('admins')" id="admins-nav" style="display:none"><span class="icon">👥</span> Manage Admins</div>
-    <div class="nav-item" onclick="showPage('password')"><span class="icon">🔑</span> Change Password</div>
+    <div class="nav-item active" onclick="showPage('dashboard', this)">📊 Dashboard</div>
+    <div class="nav-item" onclick="showPage('leads', this)">📋 All Leads</div>
+    <div class="nav-item" onclick="showPage('manual', this)">➕ Add Lead</div>
+    <div class="nav-item" onclick="showPage('waiting', this)">⏳ Waiting Queue</div>
+    <div class="nav-item" onclick="showPage('reps', this)">👤 Manage Reps</div>
+    <div class="nav-item" onclick="showPage('admins', this)" id="admins-nav" style="display:none">🔐 Manage Admins</div>
+    <div class="nav-item" onclick="showPage('password', this)">🔑 Change Password</div>
     <div class="sidebar-footer">
       <div class="sidebar-user"><strong id="sidebar-username">...</strong>Admin</div>
       <button class="logout-btn" onclick="logout()">Sign Out</button>
@@ -145,125 +133,150 @@
 
   <div class="main">
 
-    <!-- DASHBOARD PAGE -->
+    <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
       <div class="page-title">Dashboard</div>
       <div class="filter-bar">
-        <input type="date" id="d-from" />
-        <span style="color:#888">to</span>
-        <input type="date" id="d-to" />
+        <input type="date" id="d-from" /><span style="color:#888">to</span><input type="date" id="d-to" />
         <button class="btn btn-primary" onclick="loadDashboard()">Apply</button>
         <button class="btn btn-outline" onclick="clearDateFilter()">All Time</button>
         <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
       </div>
-      <div class="stat-grid" id="stat-grid">
+      <div class="stat-grid">
         <div class="stat-card"><div class="label">Total Leads</div><div class="value" id="s-total">—</div></div>
         <div class="stat-card"><div class="label">Claimed</div><div class="value green" id="s-claimed">—</div></div>
         <div class="stat-card"><div class="label">Positive</div><div class="value green" id="s-positive">—</div></div>
         <div class="stat-card"><div class="label">→ VanillaSoft</div><div class="value blue" id="s-vs">—</div></div>
         <div class="stat-card"><div class="label">Negative</div><div class="value red" id="s-neg">—</div></div>
         <div class="stat-card"><div class="label">Waiting</div><div class="value orange" id="s-wait">—</div></div>
-        <div class="stat-card"><div class="label">Avg Response</div><div class="value" id="s-resp">—</div><div class="sub">seconds</div></div>
+        <div class="stat-card"><div class="label">Avg Response</div><div class="value" id="s-resp">—</div><div class="sub">to claim</div></div>
       </div>
-
       <div class="table-card">
-        <div class="table-card-header"><h3>Rep Performance</h3></div>
+        <div class="table-card-header"><h3>🏆 Rep Leaderboard</h3></div>
         <div id="rep-leaderboard"><div class="loading">Loading...</div></div>
       </div>
-
       <div class="table-card">
         <div class="table-card-header"><h3>Dispositions Breakdown</h3></div>
-        <table>
-          <thead><tr><th>Disposition</th><th>Count</th></tr></thead>
-          <tbody id="disposition-table"><tr><td colspan="2" class="loading">Loading...</td></tr></tbody>
-        </table>
+        <table><thead><tr><th>Disposition</th><th>Count</th></tr></thead>
+        <tbody id="disposition-table"><tr><td colspan="2" class="loading">Loading...</td></tr></tbody></table>
       </div>
     </div>
 
-    <!-- ALL LEADS PAGE -->
+    <!-- ALL LEADS -->
     <div class="page" id="page-leads">
       <div class="page-title">All Leads</div>
       <div class="filter-bar">
-        <input type="date" id="l-from" />
-        <span style="color:#888">to</span>
-        <input type="date" id="l-to" />
+        <input type="date" id="l-from" /><span style="color:#888">to</span><input type="date" id="l-to" />
         <select id="l-rep"><option value="">All Reps</option></select>
         <select id="l-disp">
           <option value="">All Dispositions</option>
-          <option value="imn_app_taken">IMN App Taken</option>
-          <option value="imn_app_sent">IMN App Sent</option>
-          <option value="left_message">Left Message</option>
-          <option value="no_answer">No Answer</option>
-          <option value="in_market_later">In Market Later</option>
-          <option value="not_qualified">Not Qualified</option>
-          <option value="not_interested">Not Interested</option>
-          <option value="wrong_number">Wrong Number</option>
+          <option value="imn_app_taken">IMN App Taken</option><option value="imn_app_sent">IMN App Sent</option>
+          <option value="left_message">Left Message</option><option value="no_answer">No Answer</option>
+          <option value="in_market_later">In Market Later</option><option value="not_qualified">Not Qualified</option>
+          <option value="not_interested">Not Interested</option><option value="wrong_number">Wrong Number</option>
         </select>
         <button class="btn btn-primary" onclick="loadLeads()">Search</button>
         <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
       </div>
       <div class="table-card">
-        <div class="table-card-header">
-          <h3>Leads</h3>
-          <span id="leads-count" style="font-size:13px;color:#888"></span>
-        </div>
+        <div class="table-card-header"><h3>Leads</h3><span id="leads-count" style="font-size:13px;color:#888"></span></div>
         <div style="overflow-x:auto">
           <table>
-            <thead>
-              <tr>
-                <th>Received</th><th>Type</th><th>Name</th><th>Phone</th><th>Company</th>
-                <th>State</th><th>Qualify</th><th>Claimed By</th><th>Disposition</th><th>Notes</th>
-              </tr>
-            </thead>
-            <tbody id="leads-table"><tr><td colspan="10" class="loading">Run a search above</td></tr></tbody>
+            <thead><tr><th></th><th>Received</th><th>Type</th><th>Name</th><th>Phone</th><th>Company</th><th>State</th><th>Qualify</th><th>Claimed By</th><th>Disposition</th><th>Notes</th></tr></thead>
+            <tbody id="leads-table"><tr><td colspan="11" class="loading">Run a search above</td></tr></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- WAITING QUEUE PAGE -->
+    <!-- MANUAL LEAD -->
+    <div class="page" id="page-manual">
+      <div class="page-title">Add Lead Manually</div>
+      <div class="form-card">
+        <h3>Lead Information</h3>
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="form-group"><label>First Name *</label><input type="text" id="m-fname" placeholder="First name" /></div>
+          <div class="form-group"><label>Last Name *</label><input type="text" id="m-lname" placeholder="Last name" /></div>
+          <div class="form-group"><label>Phone *</label><input type="tel" id="m-phone" placeholder="(555) 555-5555" /></div>
+          <div class="form-group"><label>Email</label><input type="email" id="m-email" placeholder="email@example.com" /></div>
+          <div class="form-group"><label>Company Name</label><input type="text" id="m-company" placeholder="Company name" /></div>
+          <div class="form-group"><label>State</label><input type="text" id="m-state" placeholder="NY" maxlength="2" /></div>
+          <div class="form-group"><label>Lead Type *</label>
+            <select id="m-type">
+              <option value="Working Capital Campaign">Working Capital</option>
+              <option value="Equipment Financing Campaign">Equipment Financing</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Qualify Amount</label><input type="text" id="m-qualify" placeholder="$50,000" /></div>
+          <div class="form-group"><label>Timeline</label><input type="text" id="m-timeline" placeholder="Within 30 days" /></div>
+          <div class="form-group"><label>Time in Business</label><input type="text" id="m-tib" placeholder="5 years" /></div>
+          <div class="form-group"><label>Monthly Revenue</label><input type="text" id="m-revenue" placeholder="$40,000" /></div>
+          <div class="form-group"><label>Funds Used For</label><input type="text" id="m-funds" placeholder="Equipment purchase" /></div>
+        </div>
+        <div class="form-group" style="margin-bottom:14px"><label>Conducts Business</label><input type="text" id="m-conducts" placeholder="Storefront, online, etc." /></div>
+        <button class="btn btn-primary" onclick="addManualLead()" style="min-width:160px">🚀 Send to Reps Live</button>
+        <div class="form-msg" id="manual-msg"></div>
+      </div>
+    </div>
+
+    <!-- WAITING QUEUE -->
     <div class="page" id="page-waiting">
       <div class="page-title">Waiting Queue</div>
       <div class="table-card">
-        <div class="table-card-header">
-          <h3>Unclaimed Leads</h3>
-          <button class="btn btn-outline btn-sm" onclick="loadWaiting()">Refresh</button>
+        <div class="table-card-header"><h3>Unclaimed Leads</h3><button class="btn btn-outline btn-sm" onclick="loadWaiting()">Refresh</button></div>
+        <table><thead><tr><th>Lead Type</th><th>Timezone</th><th>Added</th><th>Age</th></tr></thead>
+        <tbody id="waiting-table"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- MANAGE REPS -->
+    <div class="page" id="page-reps">
+      <div class="page-title">Manage Reps</div>
+      <div class="form-card">
+        <h3>Invite New Rep</h3>
+        <div class="form-row-inline">
+          <div class="form-group"><label>Full Name</label><input type="text" id="rep-name" placeholder="Jane Smith" /></div>
+          <div class="form-group"><label>Email Address</label><input type="email" id="rep-email" placeholder="jane@company.com" /></div>
+          <button class="btn btn-primary" onclick="inviteRep()" style="align-self:flex-end">Send Invite</button>
         </div>
+        <div class="form-msg" id="invite-msg"></div>
+      </div>
+      <div class="table-card">
+        <div class="table-card-header"><h3>All Reps</h3><button class="btn btn-outline btn-sm" onclick="loadReps()">Refresh</button></div>
         <table>
-          <thead><tr><th>Lead Type</th><th>Timezone</th><th>Added</th><th>Age</th></tr></thead>
-          <tbody id="waiting-table"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+          <thead><tr><th>Rep</th><th>Email</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead>
+          <tbody id="reps-table"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
 
-    <!-- MANAGE ADMINS PAGE -->
+    <!-- MANAGE ADMINS -->
     <div class="page" id="page-admins">
       <div class="page-title">Manage Admins</div>
-      <div class="add-admin-form">
+      <div class="form-card">
         <h3>Add New Admin</h3>
-        <div class="form-row">
+        <div class="form-row-inline">
           <div class="form-group"><label>Username</label><input type="text" id="new-username" placeholder="username" /></div>
           <div class="form-group"><label>Password</label><input type="password" id="new-password" placeholder="password" /></div>
-          <button class="btn btn-primary" onclick="addAdmin()">Add Admin</button>
+          <button class="btn btn-primary" onclick="addAdmin()" style="align-self:flex-end">Add Admin</button>
         </div>
-        <div class="checkbox-row" style="margin-top:10px">
-          <input type="checkbox" id="new-super" />
-          <label for="new-super">Super Admin (can manage other admins)</label>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:13px">
+          <input type="checkbox" id="new-super" /><label for="new-super">Super Admin (can manage other admins)</label>
         </div>
-        <div id="add-admin-msg" style="font-size:13px;margin-top:8px;"></div>
+        <div class="form-msg" id="add-admin-msg"></div>
       </div>
       <div class="admin-list" id="admin-list"><div class="loading">Loading...</div></div>
     </div>
 
-    <!-- CHANGE PASSWORD PAGE -->
+    <!-- CHANGE PASSWORD -->
     <div class="page" id="page-password">
       <div class="page-title">Change Password</div>
-      <div class="add-admin-form" style="max-width:400px">
+      <div class="form-card" style="max-width:400px">
         <h3>New Password</h3>
         <div class="form-group" style="margin-bottom:10px"><label>New Password</label><input type="password" id="new-pw" placeholder="Enter new password" /></div>
         <div class="form-group" style="margin-bottom:14px"><label>Confirm Password</label><input type="password" id="confirm-pw" placeholder="Confirm new password" /></div>
         <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
-        <div id="pw-msg" style="font-size:13px;margin-top:8px;"></div>
+        <div class="form-msg" id="pw-msg"></div>
       </div>
     </div>
 
@@ -275,31 +288,27 @@
   let token = localStorage.getItem('admin_token') || '';
   let currentAdmin = JSON.parse(localStorage.getItem('admin_info') || '{}');
 
-  // ── AUTH ──────────────────────────────────────────────────
+  const dispMap = {
+    imn_app_taken:'IMN App Taken', imn_app_sent:'IMN App Sent',
+    left_message:'Left Message', no_answer:'No Answer', in_market_later:'In Market Later',
+    not_qualified:'Not Qualified', not_interested:'Not Interested', wrong_number:'Wrong Number'
+  };
+
   async function doLogin() {
     const username = document.getElementById('login-user').value.trim();
     const password = document.getElementById('login-pass').value;
     if (!username || !password) return;
     try {
-      const res = await fetch('/admin/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
+      const res = await fetch('/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password}) });
       const data = await res.json();
       if (!res.ok) { document.getElementById('login-error').textContent = data.error; return; }
-      token = data.token;
-      currentAdmin = data;
+      token = data.token; currentAdmin = data;
       localStorage.setItem('admin_token', token);
       localStorage.setItem('admin_info', JSON.stringify(data));
       showApp();
-    } catch(e) {
-      document.getElementById('login-error').textContent = 'Connection error';
-    }
+    } catch(e) { document.getElementById('login-error').textContent = 'Connection error'; }
   }
-
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
-  });
+  document.addEventListener('keydown', e => { if (e.key==='Enter' && document.getElementById('login-screen').style.display!=='none') doLogin(); });
 
   function showApp() {
     document.getElementById('login-screen').style.display = 'none';
@@ -308,61 +317,50 @@
     if (currentAdmin.isSuperAdmin) document.getElementById('admins-nav').style.display = 'flex';
     loadDashboard();
   }
+  function logout() { localStorage.removeItem('admin_token'); localStorage.removeItem('admin_info'); location.reload(); }
 
-  function logout() {
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_info');
-    location.reload();
-  }
-
-  async function api(path, options = {}) {
-    const res = await fetch(path, {
-      ...options,
-      headers: { 'x-admin-token': token, 'Content-Type': 'application/json', ...(options.headers || {}) }
-    });
-    if (res.status === 401) { logout(); return null; }
+  async function api(path, options={}) {
+    const res = await fetch(path, { ...options, headers: {'x-admin-token':token,'Content-Type':'application/json',...(options.headers||{})} });
+    if (res.status===401) { logout(); return null; }
     return res.json();
   }
 
-  // ── NAVIGATION ────────────────────────────────────────────
-  function showPage(name) {
+  function showPage(name, el) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    document.getElementById('page-' + name).classList.add('active');
-    event.currentTarget.classList.add('active');
-    if (name === 'leads') loadLeads();
-    if (name === 'waiting') loadWaiting();
-    if (name === 'admins') loadAdmins();
+    document.getElementById('page-'+name).classList.add('active');
+    if (el) el.classList.add('active');
+    if (name==='leads') loadLeads();
+    if (name==='waiting') loadWaiting();
+    if (name==='admins') loadAdmins();
+    if (name==='reps') loadReps();
   }
 
   // ── DASHBOARD ─────────────────────────────────────────────
   async function loadDashboard() {
     const from = document.getElementById('d-from').value;
     const to = document.getElementById('d-to').value;
-    const qs = from && to ? `?from=${from}&to=${to}T23:59:59` : '';
-    const data = await api('/admin/stats' + qs);
+    const qs = from&&to ? `?from=${from}&to=${to}T23:59:59` : '';
+    const data = await api('/admin/stats'+qs);
     if (!data) return;
-
     document.getElementById('s-total').textContent = data.totalLeads;
-    const claimed = data.byRep.reduce((s, r) => s + parseInt(r.claimed), 0);
-    const positive = data.byRep.reduce((s, r) => s + parseInt(r.positive), 0);
-    const vs = data.byRep.reduce((s, r) => s + parseInt(r.vanillasoft), 0);
-    const neg = data.byRep.reduce((s, r) => s + parseInt(r.negative), 0);
+    const claimed = data.byRep.reduce((s,r)=>s+parseInt(r.claimed),0);
+    const positive = data.byRep.reduce((s,r)=>s+parseInt(r.positive),0);
+    const vs = data.byRep.reduce((s,r)=>s+parseInt(r.vanillasoft),0);
+    const neg = data.byRep.reduce((s,r)=>s+parseInt(r.negative),0);
     document.getElementById('s-claimed').textContent = claimed;
     document.getElementById('s-positive').textContent = positive;
     document.getElementById('s-vs').textContent = vs;
     document.getElementById('s-neg').textContent = neg;
     document.getElementById('s-wait').textContent = data.waitingCount;
     const secs = data.avgResponseSeconds;
-    document.getElementById('s-resp').textContent = secs > 60 ? `${Math.round(secs/60)}m` : `${secs}s`;
-
-    // Rep leaderboard
+    document.getElementById('s-resp').textContent = secs>60?`${Math.round(secs/60)}m`:`${secs}s`;
     const lb = document.getElementById('rep-leaderboard');
-    if (data.byRep.length === 0) { lb.innerHTML = '<div class="empty-msg">No data yet</div>'; }
+    if (data.byRep.length===0) { lb.innerHTML='<div class="empty-msg">No data yet</div>'; }
     else {
-      lb.innerHTML = data.byRep.map((r, i) => `
+      lb.innerHTML = data.byRep.map((r,i)=>`
         <div class="rep-row">
-          <div class="rep-rank ${i === 0 ? 'top' : ''}">${i+1}</div>
+          <div class="rep-rank ${i===0?'top':''}">${i+1}</div>
           <div class="rep-avatar">${r.rep_name.substring(0,2).toUpperCase()}</div>
           <div class="rep-name">${r.rep_name}</div>
           <div class="rep-stats">
@@ -371,71 +369,75 @@
             <div class="rep-stat"><div class="val" style="color:#185FA5">${r.vanillasoft}</div><div class="lbl">VanillaSoft</div></div>
             <div class="rep-stat"><div class="val" style="color:#993C1D">${r.negative}</div><div class="lbl">Negative</div></div>
           </div>
-        </div>
-      `).join('');
+        </div>`).join('');
     }
-
-    // Disposition table
-    const dispMap = {
-      imn_app_taken: 'IMN App Taken', imn_app_sent: 'IMN App Sent',
-      left_message: 'Left Message', no_answer: 'No Answer', in_market_later: 'In Market Later',
-      not_qualified: 'Not Qualified', not_interested: 'Not Interested', wrong_number: 'Wrong Number'
-    };
     const dt = document.getElementById('disposition-table');
-    if (data.byDisposition.length === 0) { dt.innerHTML = '<tr><td colspan="2" class="empty-msg">No dispositions yet</td></tr>'; }
-    else {
-      dt.innerHTML = data.byDisposition.map(d => `
-        <tr>
-          <td><span class="badge ${dispositionBadge(d.disposition)}">${dispMap[d.disposition] || d.disposition}</span></td>
-          <td><strong>${d.count}</strong></td>
-        </tr>
-      `).join('');
-    }
+    if (data.byDisposition.length===0) { dt.innerHTML='<tr><td colspan="2" class="empty-msg">No dispositions yet</td></tr>'; }
+    else { dt.innerHTML = data.byDisposition.map(d=>`<tr><td><span class="badge ${dBadge(d.disposition)}">${dispMap[d.disposition]||d.disposition}</span></td><td><strong>${d.count}</strong></td></tr>`).join(''); }
   }
-
-  function clearDateFilter() {
-    document.getElementById('d-from').value = '';
-    document.getElementById('d-to').value = '';
-    loadDashboard();
-  }
+  function clearDateFilter() { document.getElementById('d-from').value=''; document.getElementById('d-to').value=''; loadDashboard(); }
 
   // ── ALL LEADS ─────────────────────────────────────────────
   async function loadLeads() {
-    const from = document.getElementById('l-from').value;
-    const to = document.getElementById('l-to').value;
-    const rep = document.getElementById('l-rep').value;
-    const disp = document.getElementById('l-disp').value;
-    let qs = '?';
-    if (from && to) qs += `from=${from}&to=${to}T23:59:59&`;
-    if (rep) qs += `rep=${encodeURIComponent(rep)}&`;
-    if (disp) qs += `disposition=${disp}&`;
-
-    const data = await api('/admin/leads' + qs);
-    if (!data) return;
-    document.getElementById('leads-count').textContent = `${data.length} leads`;
-
-    const dispMap = {
-      imn_app_taken: 'IMN App Taken', imn_app_sent: 'IMN App Sent',
-      left_message: 'Left Message', no_answer: 'No Answer', in_market_later: 'In Market Later',
-      not_qualified: 'Not Qualified', not_interested: 'Not Interested', wrong_number: 'Wrong Number'
-    };
-
+    const from=document.getElementById('l-from').value, to=document.getElementById('l-to').value;
+    const rep=document.getElementById('l-rep').value, disp=document.getElementById('l-disp').value;
+    let qs='?';
+    if(from&&to) qs+=`from=${from}&to=${to}T23:59:59&`;
+    if(rep) qs+=`rep=${encodeURIComponent(rep)}&`;
+    if(disp) qs+=`disposition=${disp}&`;
+    const data = await api('/admin/leads'+qs);
+    if(!data) return;
+    document.getElementById('leads-count').textContent=`${data.length} leads`;
     const tb = document.getElementById('leads-table');
-    if (data.length === 0) { tb.innerHTML = '<tr><td colspan="10" class="empty-msg">No leads found</td></tr>'; return; }
-    tb.innerHTML = data.map(l => `
+    if(data.length===0) { tb.innerHTML='<tr><td colspan="11" class="empty-msg">No leads found</td></tr>'; return; }
+    tb.innerHTML = data.map(l=>`
       <tr>
+        <td><button class="delete-btn" onclick="deleteLead('${l.id}')" title="Delete lead">🗑</button></td>
         <td>${formatDate(l.received_at)}</td>
-        <td><span class="badge ${l.lead_type === 'Working Capital' ? 'badge-vs' : 'badge-positive'}">${l.lead_type}</span></td>
+        <td><span class="badge ${l.lead_type==='Working Capital'?'badge-vs':'badge-positive'}">${l.lead_type}</span></td>
         <td>${l.first_name} ${l.last_name}</td>
         <td>${formatPhone(l.phone)}</td>
-        <td>${l.company_name || '—'}</td>
-        <td>${l.state || '—'}</td>
-        <td>${l.qualify_amount || '—'}</td>
-        <td>${l.claimed_by || '<span class="badge badge-unclaimed">Unclaimed</span>'}</td>
-        <td>${l.disposition ? `<span class="badge ${dispositionBadge(l.disposition)}">${dispMap[l.disposition]||l.disposition}</span>` : '—'}</td>
-        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.notes || '—'}</td>
-      </tr>
-    `).join('');
+        <td>${l.company_name||'—'}</td>
+        <td>${l.state||'—'}</td>
+        <td>${l.qualify_amount||'—'}</td>
+        <td>${l.claimed_by||'<span class="badge badge-unclaimed">Unclaimed</span>'}</td>
+        <td>${l.disposition?`<span class="badge ${dBadge(l.disposition)}">${dispMap[l.disposition]||l.disposition}</span>`:'—'}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.notes||'—'}</td>
+      </tr>`).join('');
+  }
+
+  async function deleteLead(id) {
+    if (!confirm('Delete this lead permanently? This cannot be undone.')) return;
+    const data = await api(`/admin/leads/${id}`, { method:'DELETE' });
+    if (data?.success) loadLeads();
+  }
+
+  // ── MANUAL LEAD ───────────────────────────────────────────
+  async function addManualLead() {
+    const msg = document.getElementById('manual-msg');
+    const firstName = document.getElementById('m-fname').value.trim();
+    const lastName = document.getElementById('m-lname').value.trim();
+    const phone = document.getElementById('m-phone').value.trim();
+    if (!firstName || !lastName || !phone) { msg.className='form-msg error'; msg.textContent='First name, last name and phone are required'; return; }
+    const body = {
+      firstName, lastName, phone,
+      email: document.getElementById('m-email').value.trim(),
+      companyName: document.getElementById('m-company').value.trim(),
+      state: document.getElementById('m-state').value.trim(),
+      campaignName: document.getElementById('m-type').value,
+      qualifyAmount: document.getElementById('m-qualify').value.trim(),
+      timeline: document.getElementById('m-timeline').value.trim(),
+      timeInBusiness: document.getElementById('m-tib').value.trim(),
+      monthlyRevenue: document.getElementById('m-revenue').value.trim(),
+      fundsUsedFor: document.getElementById('m-funds').value.trim(),
+      conductsBusiness: document.getElementById('m-conducts').value.trim(),
+    };
+    const data = await api('/admin/leads/manual', { method:'POST', body:JSON.stringify(body) });
+    if (data?.success) {
+      msg.className='form-msg success'; msg.textContent='✅ Lead sent to all reps live!';
+      ['m-fname','m-lname','m-phone','m-email','m-company','m-state','m-qualify','m-timeline','m-tib','m-revenue','m-funds','m-conducts'].forEach(id => document.getElementById(id).value='');
+      setTimeout(() => msg.textContent='', 4000);
+    } else { msg.className='form-msg error'; msg.textContent = data?.error || 'Error sending lead'; }
   }
 
   // ── WAITING QUEUE ─────────────────────────────────────────
@@ -443,20 +445,85 @@
     const data = await api('/admin/waiting');
     if (!data) return;
     const tb = document.getElementById('waiting-table');
-    if (data.length === 0) { tb.innerHTML = '<tr><td colspan="4" class="empty-msg">No leads waiting</td></tr>'; return; }
-    tb.innerHTML = data.map(w => {
-      const lead = w.lead_data;
-      const age = Math.floor((Date.now() - new Date(w.added_at).getTime()) / 60000);
-      const ageStr = age < 60 ? `${age}m` : age < 1440 ? `${Math.floor(age/60)}h` : `${Math.floor(age/1440)}d`;
-      return `
-        <tr>
-          <td><span class="badge ${lead.leadType === 'Working Capital' ? 'badge-vs' : 'badge-positive'}">${lead.leadType}</span></td>
-          <td>${tzLabel(lead.timezone)}</td>
-          <td>${formatDate(w.added_at)}</td>
-          <td><strong>${ageStr}</strong></td>
-        </tr>
-      `;
+    if (data.length===0) { tb.innerHTML='<tr><td colspan="4" class="empty-msg">No leads waiting</td></tr>'; return; }
+    tb.innerHTML = data.map(w=>{
+      const lead=w.lead_data;
+      const age=Math.floor((Date.now()-new Date(w.added_at).getTime())/60000);
+      const ageStr=age<60?`${age}m`:age<1440?`${Math.floor(age/60)}h`:`${Math.floor(age/1440)}d`;
+      return `<tr>
+        <td><span class="badge ${lead.leadType==='Working Capital'?'badge-vs':'badge-positive'}">${lead.leadType}</span></td>
+        <td>${tzLabel(lead.timezone)}</td>
+        <td>${formatDate(w.added_at)}</td>
+        <td><strong>${ageStr}</strong></td>
+      </tr>`;
     }).join('');
+  }
+
+  // ── MANAGE REPS ───────────────────────────────────────────
+  async function loadReps() {
+    const data = await api('/admin/reps');
+    if (!data) return;
+    const tb = document.getElementById('reps-table');
+    if (data.length===0) { tb.innerHTML='<tr><td colspan="5" class="empty-msg">No reps yet — invite one above</td></tr>'; return; }
+    tb.innerHTML = data.map(r=>`
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="rep-avatar" style="width:30px;height:30px;font-size:11px">
+              ${r.profile_pic ? `<img src="${r.profile_pic}" alt="${r.name}" />` : r.name.substring(0,2).toUpperCase()}
+            </div>
+            <strong>${r.name}</strong>
+          </div>
+        </td>
+        <td>${r.email}</td>
+        <td><span class="badge ${r.active?'badge-active':'badge-inactive'}">${r.active?'Active':'Inactive'}</span></td>
+        <td>${r.last_login ? formatDate(r.last_login) : '<span style="color:#aaa">Never</span>'}</td>
+        <td>
+          <div class="rep-actions">
+            <button class="btn btn-outline btn-sm" onclick="resendInvite(${r.id})">Resend Invite</button>
+            <button class="btn btn-outline btn-sm" onclick="resetRepPassword(${r.id}, '${r.name}')">Reset PW</button>
+            <button class="btn btn-warn btn-sm" onclick="resetCooldown(${r.id}, '${r.name}')">Reset Lock</button>
+            <button class="btn ${r.active?'btn-danger':'btn-primary'} btn-sm" onclick="toggleRep(${r.id})">${r.active?'Deactivate':'Activate'}</button>
+          </div>
+        </td>
+      </tr>`).join('');
+  }
+
+  async function inviteRep() {
+    const name = document.getElementById('rep-name').value.trim();
+    const email = document.getElementById('rep-email').value.trim();
+    const msg = document.getElementById('invite-msg');
+    if (!name || !email) { msg.className='form-msg error'; msg.textContent='Name and email required'; return; }
+    const data = await api('/admin/reps/invite', { method:'POST', body:JSON.stringify({name,email}) });
+    if (!data) return;
+    if (data.error) { msg.className='form-msg error'; msg.textContent=data.error; return; }
+    msg.className='form-msg success'; msg.textContent=`✅ Invitation sent to ${email}`;
+    document.getElementById('rep-name').value=''; document.getElementById('rep-email').value='';
+    loadReps();
+  }
+
+  async function resendInvite(id) {
+    const data = await api(`/admin/reps/${id}/resend-invite`, { method:'POST' });
+    if (data?.success) alert('Invitation resent!');
+  }
+
+  async function resetRepPassword(id, name) {
+    const pw = prompt(`Set new password for ${name}:`);
+    if (!pw) return;
+    if (pw.length < 6) { alert('Password must be at least 6 characters'); return; }
+    const data = await api(`/admin/reps/${id}/reset-password`, { method:'POST', body:JSON.stringify({newPassword:pw}) });
+    if (data?.success) alert(`Password updated for ${name}. They will need to log in again.`);
+  }
+
+  async function resetCooldown(id, name) {
+    if (!confirm(`Reset active lead lock and cooldown for ${name}?`)) return;
+    const data = await api(`/admin/reps/${id}/reset-cooldown`, { method:'POST' });
+    if (data?.success) alert(`${name}'s lock has been cleared — they can claim again immediately.`);
+  }
+
+  async function toggleRep(id) {
+    const data = await api(`/admin/reps/${id}/toggle`, { method:'PATCH' });
+    if (data) loadReps();
   }
 
   // ── MANAGE ADMINS ─────────────────────────────────────────
@@ -464,106 +531,89 @@
     const data = await api('/admin/admins');
     if (!data) return;
     const list = document.getElementById('admin-list');
-    list.innerHTML = data.map(a => `
+    list.innerHTML = data.map(a=>`
       <div class="admin-item">
         <div class="rep-avatar">${a.username.substring(0,2).toUpperCase()}</div>
         <div class="admin-item-info">
-          <div class="admin-item-name">
-            ${a.username}
-            ${a.is_super_admin ? '<span class="super-badge">Super Admin</span>' : ''}
-          </div>
+          <div class="admin-item-name">${a.username}${a.is_super_admin?'<span class="super-badge">Super Admin</span>':''}</div>
           <div class="admin-item-sub">Added ${formatDate(a.created_at)}</div>
         </div>
-        ${!a.is_super_admin || currentAdmin.username !== a.username ? `
-          <button class="btn btn-danger btn-sm" onclick="deleteAdmin(${a.id}, '${a.username}')">Remove</button>
-        ` : '<span style="font-size:12px;color:#aaa">You</span>'}
-      </div>
-    `).join('');
+        ${!a.is_super_admin?`<button class="btn btn-danger btn-sm" onclick="deleteAdmin(${a.id},'${a.username}')">Remove</button>`:'<span style="font-size:12px;color:#aaa">You</span>'}
+      </div>`).join('');
   }
 
   async function addAdmin() {
-    const username = document.getElementById('new-username').value.trim();
-    const password = document.getElementById('new-password').value;
-    const isSuperAdmin = document.getElementById('new-super').checked;
-    const msg = document.getElementById('add-admin-msg');
-    if (!username || !password) { msg.style.color = '#e74c3c'; msg.textContent = 'Username and password required'; return; }
-    const data = await api('/admin/admins', { method: 'POST', body: JSON.stringify({ username, password, isSuperAdmin }) });
-    if (!data) return;
-    if (data.error) { msg.style.color = '#e74c3c'; msg.textContent = data.error; return; }
-    msg.style.color = '#0F6E56'; msg.textContent = `Admin "${username}" added successfully`;
-    document.getElementById('new-username').value = '';
-    document.getElementById('new-password').value = '';
-    document.getElementById('new-super').checked = false;
+    const username=document.getElementById('new-username').value.trim();
+    const password=document.getElementById('new-password').value;
+    const isSuperAdmin=document.getElementById('new-super').checked;
+    const msg=document.getElementById('add-admin-msg');
+    if(!username||!password){msg.className='form-msg error';msg.textContent='Username and password required';return;}
+    const data=await api('/admin/admins',{method:'POST',body:JSON.stringify({username,password,isSuperAdmin})});
+    if(!data) return;
+    if(data.error){msg.className='form-msg error';msg.textContent=data.error;return;}
+    msg.className='form-msg success';msg.textContent=`Admin "${username}" added`;
+    document.getElementById('new-username').value='';document.getElementById('new-password').value='';
     loadAdmins();
   }
 
   async function deleteAdmin(id, username) {
-    if (!confirm(`Remove admin "${username}"?`)) return;
-    await api(`/admin/admins/${id}`, { method: 'DELETE' });
+    if(!confirm(`Remove admin "${username}"?`)) return;
+    await api(`/admin/admins/${id}`,{method:'DELETE'});
     loadAdmins();
   }
 
-  // ── CHANGE PASSWORD ───────────────────────────────────────
   async function changePassword() {
-    const pw = document.getElementById('new-pw').value;
-    const confirm = document.getElementById('confirm-pw').value;
-    const msg = document.getElementById('pw-msg');
-    if (!pw) { msg.style.color = '#e74c3c'; msg.textContent = 'Enter a new password'; return; }
-    if (pw !== confirm) { msg.style.color = '#e74c3c'; msg.textContent = 'Passwords do not match'; return; }
-    const data = await api('/admin/change-password', { method: 'POST', body: JSON.stringify({ newPassword: pw }) });
-    if (!data) return;
-    msg.style.color = '#0F6E56'; msg.textContent = 'Password updated successfully';
-    document.getElementById('new-pw').value = '';
-    document.getElementById('confirm-pw').value = '';
+    const pw=document.getElementById('new-pw').value;
+    const conf=document.getElementById('confirm-pw').value;
+    const msg=document.getElementById('pw-msg');
+    if(!pw){msg.className='form-msg error';msg.textContent='Enter a new password';return;}
+    if(pw!==conf){msg.className='form-msg error';msg.textContent='Passwords do not match';return;}
+    const data=await api('/admin/change-password',{method:'POST',body:JSON.stringify({newPassword:pw})});
+    if(!data) return;
+    msg.className='form-msg success';msg.textContent='Password updated';
+    document.getElementById('new-pw').value='';document.getElementById('confirm-pw').value='';
   }
 
   // ── CSV EXPORT ────────────────────────────────────────────
   function exportCSV() {
-    const from = document.getElementById('d-from')?.value || document.getElementById('l-from')?.value || '';
-    const to = document.getElementById('d-to')?.value || document.getElementById('l-to')?.value || '';
-    let url = '/admin/export?token=' + token;
-    if (from && to) url += `&from=${from}&to=${to}T23:59:59`;
-    // Use fetch with auth header then trigger download
-    fetch(url, { headers: { 'x-admin-token': token } })
-      .then(r => r.blob())
-      .then(blob => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `leads-${new Date().toISOString().split('T')[0]}.csv`;
-        a.click();
-      });
+    const from=document.getElementById('d-from')?.value||document.getElementById('l-from')?.value||'';
+    const to=document.getElementById('d-to')?.value||document.getElementById('l-to')?.value||'';
+    let url='/admin/export';
+    if(from&&to) url+=`?from=${from}&to=${to}T23:59:59`;
+    fetch(url,{headers:{'x-admin-token':token}}).then(r=>r.blob()).then(blob=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download=`voltlead-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+    });
   }
 
   // ── HELPERS ───────────────────────────────────────────────
   function formatDate(dt) {
-    if (!dt) return '—';
-    return new Date(dt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if(!dt) return '—';
+    return new Date(dt).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
   }
-
   function formatPhone(phone) {
-    const c = (phone||'').replace(/\D/g,'');
-    const d = c.startsWith('1') ? c.slice(1) : c;
-    const m = d.match(/^(\d{3})(\d{3})(\d{4})$/);
-    return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
+    const c=(phone||'').replace(/\D/g,'');
+    const d=c.startsWith('1')?c.slice(1):c;
+    const m=d.match(/^(\d{3})(\d{3})(\d{4})$/);
+    return m?`(${m[1]}) ${m[2]}-${m[3]}`:phone;
   }
-
   function tzLabel(tz) {
-    const map = { 'America/New_York':'Eastern','America/Chicago':'Central','America/Denver':'Mountain','America/Los_Angeles':'Pacific','America/Phoenix':'Arizona','Pacific/Honolulu':'Hawaii','America/Anchorage':'Alaska' };
-    return map[tz] || tz;
+    const map={'America/New_York':'Eastern','America/Chicago':'Central','America/Denver':'Mountain','America/Los_Angeles':'Pacific','America/Phoenix':'Arizona','Pacific/Honolulu':'Hawaii','America/Anchorage':'Alaska'};
+    return map[tz]||tz;
   }
-
-  function dispositionBadge(d) {
-    if (['imn_app_taken','imn_app_sent'].includes(d)) return 'badge-positive';
-    if (['left_message','no_answer','in_market_later'].includes(d)) return 'badge-vs';
+  function dBadge(d) {
+    if(['imn_app_taken','imn_app_sent'].includes(d)) return 'badge-positive';
+    if(['left_message','no_answer','in_market_later'].includes(d)) return 'badge-vs';
     return 'badge-negative';
   }
 
   // ── INIT ──────────────────────────────────────────────────
   if (token) {
-    // Try restoring session
-    fetch('/admin/stats', { headers: { 'x-admin-token': token } })
-      .then(r => { if (r.ok) showApp(); else { localStorage.removeItem('admin_token'); } })
-      .catch(() => {});
+    fetch('/admin/stats',{headers:{'x-admin-token':token}})
+      .then(r=>{if(r.ok) showApp(); else localStorage.removeItem('admin_token');})
+      .catch(()=>{});
   }
 </script>
 </body>
