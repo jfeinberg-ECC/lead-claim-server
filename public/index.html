@@ -1159,7 +1159,13 @@
       });
       if (!res.ok) return;
       const leads = await res.json();
-      if (leads.length === 0) return;
+
+      // Reset stats from DB — don't trust localStorage
+      myClaimed = leads.length;
+      countPositive = 0; countSalesforce = 0; countNegative = 0;
+
+      if (leads.length === 0) { updateStats(); return; }
+
       leads.forEach(l => {
         const lead = {
           id: l.id, leadType: l.lead_type, timezone: l.timezone,
@@ -1171,15 +1177,20 @@
           monthlyRevenue: l.monthly_revenue, fundsUsedFor: l.funds_used_for,
           conductsBusiness: l.conducts_business,
         };
+
         // Add card with claimed time
         if (!document.getElementById('card-' + lead.id)) {
           addLeadCard(lead, new Date(l.claimed_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
-          myClaimed++;
         }
-        // If disposed, mark it and collapse it
+
+        // Tally disposition stats from DB
         if (l.disposition) {
+          const grp = disposedGroup(l.disposition);
+          if (grp === 'positive') countPositive++;
+          if (grp === 'salesforce') countSalesforce++;
+          if (grp === 'negative') countNegative++;
           markDisposed(lead.id, l.disposition);
-          // Auto-collapse disposed leads from history
+          // Auto-collapse disposed leads
           const card = document.getElementById('card-' + lead.id);
           if (card) {
             card.classList.add('collapsed');
@@ -1189,10 +1200,9 @@
           // Restore notes
           const notesEl = document.getElementById('notes-' + lead.id);
           if (notesEl && l.notes) notesEl.value = l.notes;
-          // Set summary
           setLeadSummary(lead.id, lead.firstName + ' ' + lead.lastName, l.disposition);
         } else {
-          // Only block new claims if this undisposed lead was claimed recently (within 2 hours)
+          // Only block new claims if undisposed and claimed within 2 hours
           const claimedAt = new Date(l.claimed_at).getTime();
           const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
           if (claimedAt > twoHoursAgo) {
@@ -1202,6 +1212,9 @@
           setLeadSummary(lead.id, lead.firstName + ' ' + lead.lastName, null);
         }
       });
+
+      // Save accurate stats back to localStorage
+      saveState();
       updateStats();
     } catch(e) { console.warn('Could not load recent leads:', e); }
   }
