@@ -292,7 +292,11 @@
     <div class="popup-new">New Lead</div>
     <div class="popup-type" id="p-type">Working Capital</div>
     <div class="popup-tz" id="p-tz"></div>
-    <div class="popup-hours-warn" id="p-warn" style="display:none">Outside 8am–5pm in lead's timezone — proceed with caution</div>
+    <div class="popup-hours-warn" id="p-warn" style="display:none">
+      ⏰ Outside calling hours in lead's timezone<br>
+      <span style="font-size:12px;opacity:0.85">Calling hours start in <strong id="p-hours-countdown">--:--:--</strong></span><br>
+      <span style="font-size:11px;opacity:0.7;margin-top:4px;display:block">You can still claim this lead now</span>
+    </div>
     <div class="popup-locked" id="p-locked" style="display:none">⚠️ Dispose your current lead before claiming a new one</div>
     <div class="popup-timer" id="p-timer-row">Expires in <span id="p-countdown">30</span>s</div>
     <div class="timer-bar-wrap"><div class="timer-bar" id="p-bar"></div></div>
@@ -681,7 +685,19 @@
     typeEl.textContent = lead.leadType;
     typeEl.className = 'popup-type ' + (isWC ? 'wc' : 'ef');
     document.getElementById('p-tz').textContent = 'Lead timezone: ' + tzLabel(lead.timezone);
-    document.getElementById('p-warn').style.display = lead.withinCallingHours ? 'none' : 'block';
+    const outsideHours = !lead.withinCallingHours;
+    document.getElementById('p-warn').style.display = outsideHours ? 'block' : 'none';
+    // Start live countdown if outside hours
+    if (outsideHours && lead.timezone) {
+      clearInterval(window._hoursCountdownInterval);
+      const updateCountdown = () => {
+        const secs = secondsUntilCallingHours(lead.timezone);
+        const el = document.getElementById('p-hours-countdown');
+        if (el) el.textContent = formatCountdown(secs);
+      };
+      updateCountdown();
+      window._hoursCountdownInterval = setInterval(updateCountdown, 1000);
+    }
     document.getElementById('p-result').textContent = '';
     const locked = hasActiveLead;
     document.getElementById('p-locked').style.display = locked ? 'block' : 'none';
@@ -742,6 +758,7 @@
 
   function dismissPopup() {
     clearInterval(timerInterval);
+    clearInterval(window._hoursCountdownInterval);
     document.getElementById('popup-overlay').classList.remove('active');
     currentLeadId = null; currentLead = null;
   }
@@ -780,14 +797,32 @@
       const ageStr = ageSec < 60 ? `${ageSec}s ago` : ageSec < 3600 ? `${Math.floor(ageSec/60)}m ago` : ageSec < 86400 ? `${Math.floor(ageSec/3600)}h ago` : `${Math.floor(ageSec/86400)}d ago`;
       const row = document.createElement('div');
       row.className = 'waiting-card'; row.id = 'waiting-' + id;
+      const inHours = (() => {
+        try {
+          const secs = secondsUntilCallingHours(lead.timezone);
+          return secs === 0;
+        } catch(e) { return true; }
+      })();
       row.innerHTML = `
         <div class="waiting-card-info">
           <span class="waiting-badge ${isWC ? 'wc' : 'ef'}">${lead.leadType}</span>
           <span class="waiting-meta">${tzLabel(lead.timezone)}</span>
-          <span class="waiting-age">${ageStr}</span>
+          ${!inHours ? `<span class="waiting-age" id="wq-countdown-${id}" style="color:#D85A30;font-weight:600">⏰ --:--:--</span>` : `<span class="waiting-age">${ageStr}</span>`}
         </div>
         <button class="waiting-claim-btn" id="wclaim-${id}" onclick="claimFromQueue('${id}')">Claim</button>
       `;
+      // Start countdown for out-of-hours leads in queue
+      if (!inHours && lead.timezone) {
+        const updateWQCountdown = () => {
+          const el = document.getElementById('wq-countdown-' + id);
+          if (!el) return;
+          const secs = secondsUntilCallingHours(lead.timezone);
+          if (secs === 0) { el.textContent = '✅ In hours!'; el.style.color = '#1D9E75'; clearInterval(window['_wqcd_'+id]); }
+          else el.textContent = '⏰ ' + formatCountdown(secs);
+        };
+        updateWQCountdown();
+        window['_wqcd_'+id] = setInterval(updateWQCountdown, 1000);
+      }
       container.appendChild(row);
     });
   }
@@ -1051,6 +1086,30 @@
     const m = d.match(/^(\d{3})(\d{3})(\d{4})$/);
     return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
   }
+  function secondsUntilCallingHours(tz) {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false
+    }).formatToParts(now);
+    const h = parseInt(parts.find(p => p.type === 'hour').value);
+    const m = parseInt(parts.find(p => p.type === 'minute').value);
+    const s = parseInt(parts.find(p => p.type === 'second').value);
+    const currentSecs = h * 3600 + m * 60 + s;
+    const startSecs = 8 * 3600; // 8:00 AM
+    const endSecs = 17 * 3600; // 5:00 PM
+    if (currentSecs >= startSecs && currentSecs < endSecs) return 0; // In hours
+    if (currentSecs < startSecs) return startSecs - currentSecs; // Before 8am today
+    // After 5pm — until 8am tomorrow
+    return (24 * 3600 - currentSecs) + startSecs;
+  }
+
+  function formatCountdown(secs) {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+  }
+
   function tzLabel(tz) {
     const map = { 'America/New_York':'Eastern','America/Chicago':'Central','America/Denver':'Mountain','America/Los_Angeles':'Pacific','America/Phoenix':'Arizona','Pacific/Honolulu':'Hawaii','America/Anchorage':'Alaska' };
     return map[tz] || tz;
