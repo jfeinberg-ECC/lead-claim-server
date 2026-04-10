@@ -77,6 +77,8 @@ async function initDB() {
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
       password_hash TEXT,
       profile_pic TEXT,
       active BOOLEAN DEFAULT TRUE,
@@ -110,6 +112,9 @@ async function initDB() {
     );
     console.log('Default super admin created: admin / changeme123');
   }
+  // Add columns if they don't exist (safe migration)
+  await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS first_name TEXT").catch(()=>{});
+  await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS last_name TEXT").catch(()=>{});
   console.log('Database initialized');
 }
 
@@ -410,7 +415,7 @@ app.post('/rep/login', async (req, res) => {
   const token = generateToken();
   await pool.query('INSERT INTO rep_sessions (token, rep_id) VALUES ($1, $2)', [token, rep.id]);
   await pool.query('UPDATE reps SET last_login = NOW() WHERE id = $1', [rep.id]);
-  res.json({ token, name: rep.name, email: rep.email, profilePic: rep.profile_pic });
+  res.json({ token, name: rep.name, firstName: rep.first_name, lastName: rep.last_name, email: rep.email, profilePic: rep.profile_pic });
 });
 
 app.post('/rep/logout', requireRep, async (req, res) => {
@@ -420,7 +425,7 @@ app.post('/rep/logout', requireRep, async (req, res) => {
 });
 
 app.get('/rep/me', requireRep, async (req, res) => {
-  res.json({ name: req.rep.name, email: req.rep.email, profilePic: req.rep.profile_pic });
+  res.json({ name: req.rep.name, firstName: req.rep.first_name, lastName: req.rep.last_name, email: req.rep.email, profilePic: req.rep.profile_pic });
 });
 
 app.post('/rep/change-password', requireRep, async (req, res) => {
@@ -438,6 +443,17 @@ app.post('/rep/profile-pic', requireRep, async (req, res) => {
   if (!imageData) return res.status(400).json({ error: 'No image data provided' });
   await pool.query('UPDATE reps SET profile_pic = $1 WHERE id = $2', [imageData, req.rep.id]);
   res.json({ success: true, profilePic: imageData });
+});
+
+app.post('/rep/update-profile', requireRep, async (req, res) => {
+  const { firstName, lastName } = req.body;
+  if (!firstName || !lastName) return res.status(400).json({ error: 'First and last name required' });
+  const fullName = `${firstName.trim()} ${lastName.trim()}`;
+  await pool.query(
+    'UPDATE reps SET first_name = $1, last_name = $2, name = $3 WHERE id = $4',
+    [firstName.trim(), lastName.trim(), fullName, req.rep.id]
+  );
+  res.json({ success: true, name: fullName, firstName: firstName.trim(), lastName: lastName.trim() });
 });
 
 // Invite acceptance — set password from invite link
