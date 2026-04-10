@@ -365,7 +365,10 @@
       if (msg.type === 'new_lead') {
         sendNotification(msg.lead);
         if (onCooldown || hasActiveLead) {
+          // Rep is busy — silently add to waiting queue, no popup
           addToWaiting(msg.lead);
+          // Show a brief toast so rep knows a lead came in
+          showLeadToast(msg.lead);
         } else {
           pending++;
           updateStats();
@@ -398,11 +401,29 @@
         const r = document.getElementById('p-result');
         const btn = document.getElementById('p-btn');
         r.className = 'popup-result failed';
-        r.textContent = msg.reason === 'cooldown'
-          ? `Cooldown — ${msg.secondsLeft}s remaining`
-          : 'Dispose your current lead first.';
-        if (btn) { btn.textContent = 'Blocked'; btn.style.background = '#aaa'; btn.disabled = true; }
-        setTimeout(dismissPopup, 2000);
+        // Reset button so rep can see the message clearly
+        if (btn) { btn.textContent = 'Cannot Claim'; btn.style.background = '#aaa'; btn.disabled = true; }
+        if (msg.reason === 'cooldown') {
+          // Show live countdown — rep must wait
+          let secsLeft = msg.secondsLeft;
+          r.textContent = `⏱ Please wait ${secsLeft} seconds before claiming another lead`;
+          clearInterval(timerInterval);
+          timerInterval = setInterval(() => {
+            secsLeft--;
+            if (secsLeft <= 0) {
+              clearInterval(timerInterval);
+              // Re-enable claim button when cooldown expires
+              if (btn) { btn.textContent = 'Claim this lead'; btn.style.background = ''; btn.disabled = false; }
+              r.textContent = '✅ Cooldown complete — you can now claim!';
+              r.className = 'popup-result success';
+            } else {
+              r.textContent = `⏱ Please wait ${secsLeft} seconds before claiming another lead`;
+            }
+          }, 1000);
+        } else if (msg.reason === 'active_lead') {
+          r.textContent = '⚠️ You must dispose your current lead before claiming a new one.';
+          setTimeout(dismissPopup, 3000);
+        }
       }
 
       if (msg.type === 'lead_claimed') {
@@ -466,7 +487,7 @@
   }
 
   function claimLead() {
-    if (!currentLeadId || !ws || hasActiveLead) return;
+    if (!currentLeadId || !ws || hasActiveLead || onCooldown) return;
     ws.send(JSON.stringify({ type: 'claim', leadId: currentLeadId, repName }));
     document.getElementById('p-btn').textContent = 'Claiming...';
     document.getElementById('p-btn').disabled = true;
@@ -726,6 +747,14 @@
     const d = c.startsWith('1') ? c.slice(1) : c;
     const m = d.match(/^(\d{3})(\d{3})(\d{4})$/);
     return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
+  }
+
+  function showLeadToast(lead) {
+    const toast = document.getElementById('copy-toast');
+    const isWC = lead.leadType === 'Working Capital';
+    toast.textContent = `📥 New ${isWC ? 'Working Capital' : 'Equipment Financing'} lead added to queue`;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 4000);
   }
 
   function tzLabel(tz) {
