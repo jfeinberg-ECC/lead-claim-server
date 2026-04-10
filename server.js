@@ -789,14 +789,7 @@ app.get('/admin/waiting', requireAdmin, async (req, res) => {
   res.json(result.rows);
 });
 
-// One-time admin password reset — remove after use
-app.get('/reset-admin-password', async (req, res) => {
-  const secret = req.query.secret;
-  if (secret !== 'voltlead-reset-2024') return res.status(403).json({ error: 'Forbidden' });
-  const hash = hashPassword('changeme123');
-  await pool.query('UPDATE admins SET password_hash = $1 WHERE username = $2', [hash, 'admin']);
-  res.json({ success: true, message: 'Admin password reset to changeme123' });
-});
+
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', connected: clients.size, leads: Object.keys(leadData).length });
