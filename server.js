@@ -333,7 +333,18 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(data);
 
       if (msg.type === 'claim') {
-        const { leadId, repName } = msg;
+        const { leadId, repToken: msgRepToken } = msg;
+        let repName = msg.repName;
+        // Verify rep token and use authenticated name from DB
+        if (msgRepToken) {
+          try {
+            const tokenResult = await pool.query(
+              'SELECT r.name FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW() AND r.active = TRUE',
+              [msgRepToken]
+            );
+            if (tokenResult.rows.length > 0) repName = tokenResult.rows[0].name;
+          } catch(e) { console.error('Token verify error:', e); }
+        }
         const now = Date.now();
         const lastClaim = repCooldowns[repName] || 0;
         const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastClaim)) / 1000);
@@ -924,16 +935,19 @@ app.get('/reset-admin-password', async (req, res) => {
 // ── REP RECENT LEADS ─────────────────────────────────────────
 app.get('/rep/recent-leads', requireRep, async (req, res) => {
   const repName = req.rep.name;
+  // Query by rep name — also include any alternate names this rep may have used
+  // by checking all names associated with this rep's id via sessions
   const result = await pool.query(`
-    SELECT l.*,
+    SELECT DISTINCT ON (l.id) l.*,
       e_claim.created_at as claimed_at,
+      e_claim.rep_name as claimed_by_name,
       e_dispose.disposition, e_dispose.notes, e_dispose.created_at as disposed_at
     FROM leads l
-    JOIN lead_events e_claim ON l.id = e_claim.lead_id AND e_claim.event_type = 'claimed' AND e_claim.rep_name = $1
+    JOIN lead_events e_claim ON l.id = e_claim.lead_id AND e_claim.event_type = 'claimed'
     LEFT JOIN lead_events e_dispose ON l.id = e_dispose.lead_id AND e_dispose.event_type = 'disposed'
     WHERE l.received_at > NOW() - INTERVAL '30 days'
-    ORDER BY e_claim.created_at DESC
-    LIMIT 100
+    AND e_claim.rep_name = $1
+    ORDER BY l.id, e_claim.created_at DESC
   `, [repName]);
   res.json(result.rows);
 });
