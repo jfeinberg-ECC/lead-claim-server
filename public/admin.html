@@ -18,7 +18,7 @@
     .login-card button:hover { background: #0F6E56; }
     .login-error { color: #c0392b; font-size: 13px; margin-top: 8px; }
     #app { display: none; }
-    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 220px; background: #0d1117; color: #fff; padding: 1.5rem 0; }
+    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 220px; background: #0d1117; color: #fff; padding: 1.5rem 0; overflow-y: auto; display: flex; flex-direction: column; }
     .sidebar-logo { padding: 0 1.5rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 1rem; }
     .sidebar-logo h2 { font-size: 18px; font-weight: 800; color: #1D9E75; }
     .sidebar-logo h2 span { color: #fff; }
@@ -26,7 +26,8 @@
     .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 1.5rem; font-size: 14px; color: #888; cursor: pointer; transition: all 0.15s; }
     .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
     .nav-item.active { background: rgba(29,158,117,0.15); color: #1D9E75; border-right: 3px solid #1D9E75; }
-    .sidebar-footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 1rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.08); }
+    .sidebar-nav { flex: 1; }
+    .sidebar-footer { padding: 1rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.08); margin-top: auto; }
     .sidebar-user { font-size: 13px; color: #555; margin-bottom: 8px; }
     .sidebar-user strong { color: #fff; display: block; }
     .logout-btn { width: 100%; padding: 8px; background: rgba(255,255,255,0.05); color: #888; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; font-size: 13px; cursor: pointer; }
@@ -118,6 +119,7 @@
       <h2>⚡ Volt<span>lead</span></h2>
       <p>Admin Dashboard</p>
     </div>
+    <div class="sidebar-nav">
     <div class="nav-item active" onclick="showPage('dashboard', this)">📊 Dashboard</div>
     <div class="nav-item" onclick="showPage('leads', this)">📋 All Leads</div>
     <div class="nav-item" onclick="showPage('manual', this)">➕ Add Lead</div>
@@ -126,6 +128,7 @@
     <div class="nav-item" onclick="showPage('admins', this)" id="admins-nav" style="display:none">🔐 Manage Admins</div>
     <div class="nav-item" onclick="showPage('password', this)">🔑 Change Password</div>
     <div class="nav-item" onclick="switchToClaimer()" style="color:#F5A623;margin-top:8px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px">🎯 Switch to Claimer</div>
+    </div>
     <div class="sidebar-footer">
       <div class="sidebar-user"><strong id="sidebar-username">...</strong>Admin</div>
       <button class="logout-btn" onclick="logout()">Sign Out</button>
