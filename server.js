@@ -53,6 +53,8 @@ async function initDB() {
       conducts_business TEXT,
       campaign_name TEXT,
       form_name TEXT,
+      lead_source TEXT DEFAULT 'Facebook',
+      custom_fields JSONB DEFAULT '{}',
       received_at TIMESTAMPTZ DEFAULT NOW()
     );
 
@@ -131,6 +133,8 @@ async function initDB() {
   await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS first_name TEXT").catch(()=>{});
   await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS last_name TEXT").catch(()=>{});
   await pool.query("ALTER TABLE admins ADD COLUMN IF NOT EXISTS linked_rep_id INTEGER").catch(()=>{});
+  await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS lead_source TEXT DEFAULT 'Facebook'").catch(()=>{});
+  await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'").catch(()=>{});
   console.log('Database initialized');
 }
 
@@ -690,6 +694,19 @@ app.post('/webhook/lead', async (req, res) => {
   const tz = getTimezoneForPhone(phone);
   const withinHours = isWithinCallingHours(phone);
 
+  // Extract known fields, everything else goes into custom_fields
+  const knownFields = ['first_name','last_name','phone','phone_number','email','company_name','state',
+    'campaign_name','form_name','lead_source','qualify_amount','how_much_would_you_like_to_qualify_for',
+    'timeline','how_soon_are_you_looking_for_funds','time_in_business','how_long_have_you_been_in_business',
+    'monthly_revenue','whats_your_current_monthly_revenue','funds_used_for','what_will_the_funds_be_used_for',
+    'conducts_business','how_do_you_conduct_business'];
+  const customFields = {};
+  Object.keys(body).forEach(key => {
+    if (!knownFields.includes(key)) customFields[key] = body[key];
+  });
+
+  const leadSource = body.lead_source || 'Facebook';
+
   const lead = {
     id: `lead_${Date.now()}`,
     receivedAt: new Date().toISOString(),
@@ -708,6 +725,8 @@ app.post('/webhook/lead', async (req, res) => {
     conductsBusiness: body.conducts_business || body.how_do_you_conduct_business || '',
     campaignName: body.campaign_name || '',
     formName: body.form_name || '',
+    leadSource,
+    customFields,
   };
 
   leadData[lead.id] = lead;
@@ -716,17 +735,18 @@ app.post('/webhook/lead', async (req, res) => {
     await pool.query(`
       INSERT INTO leads (id, lead_type, first_name, last_name, phone, email, company_name, state,
         timezone, within_calling_hours, qualify_amount, timeline, time_in_business, monthly_revenue,
-        funds_used_for, conducts_business, campaign_name, form_name)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+        funds_used_for, conducts_business, campaign_name, form_name, lead_source, custom_fields)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
     `, [lead.id, lead.leadType, lead.firstName, lead.lastName, lead.phone, lead.email,
         lead.companyName, lead.state, lead.timezone, lead.withinCallingHours,
         lead.qualifyAmount, lead.timeline, lead.timeInBusiness, lead.monthlyRevenue,
-        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName]);
+        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName,
+        lead.leadSource, JSON.stringify(lead.customFields || {})]);
   } catch (err) {
     console.error('DB insert error:', err);
   }
 
-  console.log(`New lead: ${lead.id} | ${leadType} | ${withinHours ? 'in hours' : 'OUTSIDE hours'} | ${tz}`);
+  console.log(`New lead: ${lead.id} | ${leadType} | ${leadSource} | ${withinHours ? 'in hours' : 'OUTSIDE hours'} | ${tz}`);
   broadcastAll({ type: 'new_lead', lead: { id: lead.id, leadType, withinCallingHours: withinHours, timezone: tz } });
   res.json({ success: true, leadId: lead.id });
 });
@@ -952,6 +972,8 @@ app.post('/admin/leads/manual', requireAdmin, async (req, res) => {
     conductsBusiness: body.conductsBusiness || '',
     campaignName: body.campaignName || 'Manual Entry',
     formName: 'Admin Manual',
+    leadSource: body.leadSource || 'Manual',
+    customFields: body.customFields || {},
   };
 
   leadData[lead.id] = lead;
@@ -959,12 +981,13 @@ app.post('/admin/leads/manual', requireAdmin, async (req, res) => {
     await pool.query(`
       INSERT INTO leads (id, lead_type, first_name, last_name, phone, email, company_name, state,
         timezone, within_calling_hours, qualify_amount, timeline, time_in_business, monthly_revenue,
-        funds_used_for, conducts_business, campaign_name, form_name)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+        funds_used_for, conducts_business, campaign_name, form_name, lead_source, custom_fields)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
     `, [lead.id, lead.leadType, lead.firstName, lead.lastName, lead.phone, lead.email,
         lead.companyName, lead.state, lead.timezone, lead.withinCallingHours,
         lead.qualifyAmount, lead.timeline, lead.timeInBusiness, lead.monthlyRevenue,
-        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName]);
+        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName,
+        lead.leadSource, JSON.stringify(lead.customFields || {})]);
   } catch (err) {
     console.error('DB insert error:', err);
   }
