@@ -605,11 +605,35 @@
   // ── WEBSOCKET ─────────────────────────────────────────────
   function connectWS() {
     ws = new WebSocket(WS_URL);
-    ws.onopen = () => setConn(true);
+    ws.onopen = () => {
+      setConn(true);
+      // Ask server for authoritative state — never trust localStorage alone
+      if (repName) ws.send(JSON.stringify({ type: 'rep_init', repName }));
+    };
     ws.onclose = () => { setConn(false); setTimeout(connectWS, 3000); };
     ws.onerror = () => ws.close();
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
+      if (msg.type === 'server_state') {
+        // Server tells us the truth — override any client-side state
+        hasActiveLead = msg.hasActiveLead;
+        if (!msg.hasActiveLead) {
+          window._activeLeadData = null;
+          localStorage.removeItem(LS_ACTIVE);
+        }
+        if (msg.cooldownSecsLeft > 0) {
+          startCooldown(msg.cooldownSecsLeft);
+        } else if (!msg.hasActiveLead) {
+          // Clear any stale cooldown
+          onCooldown = false;
+          cooldownLeft = 0;
+          document.getElementById('cooldown-bar').style.display = 'none';
+          document.getElementById('cooldown-overlay').classList.remove('active');
+          localStorage.removeItem('vl_cooldownUntil');
+        }
+        console.log('Server state sync:', msg);
+      }
+
       if (msg.type === 'waiting_queue_init') {
         msg.queue.forEach(row => {
           const lead = row.lead_data;
@@ -683,6 +707,51 @@
       }
       if (msg.type === 'lead_claimed') {
         teamTotal++; removeFromWaiting(msg.leadId); updateStats(); saveState();
+      }
+
+      if (msg.type === 'lead_timeout_warning' && msg.repName === repName) {
+        // Show persistent warning banner on the lead card
+        const card = document.getElementById('card-' + msg.leadId);
+        if (card) {
+          let warning = document.getElementById('timeout-warn-' + msg.leadId);
+          if (!warning) {
+            warning = document.createElement('div');
+            warning.id = 'timeout-warn-' + msg.leadId;
+            warning.style.cssText = 'background:#FFF3CD;color:#856404;padding:10px 16px;font-size:13px;font-weight:500;border-top:1px solid #FFE082;';
+            card.appendChild(warning);
+          }
+          warning.textContent = msg.message;
+          // Also expand the card so rep sees the warning
+          card.classList.remove('collapsed');
+          const btn = document.getElementById('collapse-btn-' + msg.leadId);
+          if (btn) btn.textContent = '▼';
+        }
+        // Show toast
+        const t = document.getElementById('copy-toast');
+        t.textContent = msg.message;
+        t.style.background = '#856404';
+        t.classList.add('show');
+        setTimeout(() => { t.classList.remove('show'); t.style.background = ''; }, 6000);
+      }
+
+      if (msg.type === 'lead_timeout' && msg.repName === repName) {
+        // Lead was released — clear active lead and show alert
+        if (hasActiveLead) {
+          hasActiveLead = false;
+          window._activeLeadData = null;
+          localStorage.removeItem(LS_ACTIVE);
+          saveState();
+        }
+        // Remove the lead card
+        const card = document.getElementById('card-' + msg.leadId);
+        if (card) card.remove();
+        // Show prominent toast
+        const t = document.getElementById('copy-toast');
+        t.textContent = '⏱ ' + msg.message;
+        t.style.background = '#c0392b';
+        t.classList.add('show');
+        setTimeout(() => { t.classList.remove('show'); t.style.background = ''; }, 8000);
+        updateStats();
       }
       if (msg.type === 'lead_disposed') markDisposed(msg.leadId, msg.disposition);
     };
@@ -980,6 +1049,7 @@
       return;
     }
     ws.send(JSON.stringify({ type: 'dispose', leadId, repName, disposition, notes }));
+    ws.send(JSON.stringify({ type: 'release_lock', repName }));
     hasActiveLead = false; window._activeLeadData = null;
     // Auto-collapse after disposing
     setTimeout(() => {
