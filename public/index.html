@@ -176,6 +176,63 @@
     .cooldown-overlay.active { display: block; }
     .copy-toast { position: fixed; bottom: 80px; right: 20px; background: #333; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
     .copy-toast.show { opacity: 1; }
+
+    /* ── MOBILE ── */
+    @media (max-width: 600px) {
+      #dashboard { padding: 0.8rem; }
+
+      /* Stack timezone clocks 2x2 */
+      .tz-bar { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .tz-time { font-size: 16px; }
+      .tz-label { font-size: 10px; }
+
+      /* Stack stats 3x2 */
+      .stats { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+      .stat-val { font-size: 18px; }
+      .stat-label { font-size: 10px; }
+      .stat { padding: 10px; }
+
+      /* Agent bar compact */
+      .agent-bar { padding: 8px 12px; }
+      .agent-edit-hint { display: none; }
+      .avatar { width: 34px; height: 34px; font-size: 11px; }
+      .agent-name { font-size: 13px; }
+      .agent-sub { font-size: 11px; }
+
+      /* Lead card fields single column */
+      .lead-fields { grid-template-columns: 1fr; }
+      .lead-name { font-size: 16px; }
+      .lead-phone { font-size: 14px; }
+
+      /* Dispose buttons stack better */
+      .dispose-buttons.cols-3 { grid-template-columns: 1fr 1fr; }
+      .dispose-buttons.cols-2 { grid-template-columns: 1fr 1fr; }
+      .dispose-btn { padding: 10px 6px; font-size: 12px; }
+
+      /* Waiting queue compact */
+      .waiting-card { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .waiting-claim-btn { width: 100%; text-align: center; }
+      .waiting-age { margin-left: 0; }
+
+      /* Top bar compact */
+      .top-bar-logo { font-size: 16px; }
+      .conn-status { font-size: 12px; }
+
+      /* Modal full screen on mobile */
+      .modal-overlay { align-items: flex-end; padding: 0; }
+      .modal { border-radius: 16px 16px 0 0; max-width: 100%; width: 100%; max-height: 90vh; }
+
+      /* Popup full width */
+      .popup { width: 95%; padding: 1.5rem; }
+      .popup-type { font-size: 22px; }
+
+      /* Admin mode bar */
+      #admin-mode-bar { font-size: 11px; padding: 8px 12px; }
+      #admin-mode-bar button { font-size: 11px; padding: 5px 10px; }
+
+      /* Cooldown overlay bottom */
+      .cooldown-overlay { bottom: 10px; right: 10px; left: 10px; text-align: center; font-size: 13px; }
+    }
   </style>
 </head>
 <body>
