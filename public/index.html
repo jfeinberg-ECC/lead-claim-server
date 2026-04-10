@@ -1141,7 +1141,10 @@
       <div class="lead-card-body">
         <div class="lead-name">${lead.firstName} ${lead.lastName}</div>
         <div class="lead-phone" onclick="copyPhone('${lead.phone}')" title="Click to copy">${formatPhone(lead.phone)} <span class="copy-hint">📋</span></div>
-        <div class="lead-tz">${lead.email}${lead.state ? ' · '+lead.state : ''}</div>
+        <div class="lead-tz">
+          ${lead.email ? `<a href="mailto:${lead.email}?subject=Everlasting Capital — ${encodeURIComponent(lead.companyName || lead.firstName + ' ' + lead.lastName)}" style="color:#378ADD;text-decoration:none;" title="Send email">${lead.email} ✉️</a>` : ''}
+          ${lead.state ? ' · '+lead.state : ''}
+        </div>
         <div class="lead-fields">
           ${field('Company', lead.companyName)}
           ${field('Qualify For', lead.qualifyAmount)}
