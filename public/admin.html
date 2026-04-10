@@ -209,11 +209,21 @@
         <button class="btn btn-primary" onclick="loadLeads()">Search</button>
         <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
       </div>
+      <div id="bulk-bar" style="display:none;background:#1D9E75;color:#fff;padding:10px 16px;border-radius:10px;margin-bottom:10px;display:none;align-items:center;justify-content:space-between;gap:12px">
+        <span id="bulk-count" style="font-size:14px;font-weight:600">0 leads selected</span>
+        <div style="display:flex;gap:8px">
+          <button onclick="bulkDelete()" style="padding:7px 16px;background:#fff;color:#e74c3c;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">🗑 Delete Selected</button>
+          <button onclick="clearSelection()" style="padding:7px 16px;background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">Cancel</button>
+        </div>
+      </div>
       <div class="table-card">
         <div class="table-card-header"><h3>Leads</h3><span id="leads-count" style="font-size:13px;color:#888"></span></div>
         <div style="overflow-x:auto">
           <table>
-            <thead><tr><th></th><th>Received</th><th>Type</th><th>Name</th><th>Phone</th><th>Company</th><th>State</th><th>Qualify</th><th>Claimed By</th><th>Disposition</th><th>Notes</th></tr></thead>
+            <thead><tr>
+              <th style="width:36px"><input type="checkbox" id="select-all-leads" onclick="toggleSelectAll(this)" title="Select all" /></th>
+              <th></th><th>Received</th><th>Type</th><th>Name</th><th>Phone</th><th>Company</th><th>State</th><th>Qualify</th><th>Claimed By</th><th>Disposition</th><th>Notes</th>
+            </tr></thead>
             <tbody id="leads-table"><tr><td colspan="11" class="loading">Run a search above</td></tr></tbody>
           </table>
         </div>
@@ -438,6 +448,7 @@
     if(data.length===0) { tb.innerHTML='<tr><td colspan="11" class="empty-msg">No leads found</td></tr>'; return; }
     tb.innerHTML = data.map(l=>`
       <tr>
+        <td><input type="checkbox" class="lead-checkbox" value="${l.id}" onclick="updateBulkBar()" /></td>
         <td><button class="delete-btn" onclick="deleteLead('${l.id}')" title="Delete lead">🗑</button></td>
         <td>${formatDate(l.received_at)}</td>
         <td><span class="badge ${l.lead_type==='Working Capital'?'badge-vs':'badge-positive'}">${l.lead_type}</span></td>
@@ -655,6 +666,48 @@
     return 'badge-negative';
   }
 
+  // ── BULK DELETE ──────────────────────────────────────────
+  function toggleSelectAll(cb) {
+    document.querySelectorAll('.lead-checkbox').forEach(c => c.checked = cb.checked);
+    updateBulkBar();
+  }
+
+  function updateBulkBar() {
+    const checked = document.querySelectorAll('.lead-checkbox:checked');
+    const bar = document.getElementById('bulk-bar');
+    const count = document.getElementById('bulk-count');
+    if (checked.length > 0) {
+      bar.style.display = 'flex';
+      count.textContent = `${checked.length} lead${checked.length > 1 ? 's' : ''} selected`;
+    } else {
+      bar.style.display = 'none';
+    }
+    // Update select-all checkbox state
+    const all = document.querySelectorAll('.lead-checkbox');
+    const selectAll = document.getElementById('select-all-leads');
+    if (selectAll) {
+      selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+      selectAll.checked = checked.length === all.length && all.length > 0;
+    }
+  }
+
+  function clearSelection() {
+    document.querySelectorAll('.lead-checkbox').forEach(c => c.checked = false);
+    const selectAll = document.getElementById('select-all-leads');
+    if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+    document.getElementById('bulk-bar').style.display = 'none';
+  }
+
+  async function bulkDelete() {
+    const checked = document.querySelectorAll('.lead-checkbox:checked');
+    if (checked.length === 0) return;
+    if (!confirm(`Permanently delete ${checked.length} lead${checked.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    const ids = Array.from(checked).map(c => c.value);
+    await Promise.all(ids.map(id => api(`/admin/leads/${id}`, { method: 'DELETE' })));
+    clearSelection();
+    loadLeads();
+  }
+
   // ── LINKED REP ───────────────────────────────────────────
   async function loadLinkedRep() {
     const [repsData, linkedData] = await Promise.all([
@@ -705,7 +758,7 @@
         }
         return;
       }
-      const url = `/?switch_token=${data.token}&switch_name=${encodeURIComponent(data.repName)}&admin_mode=1`;
+      const url = `/?switch_token=${data.token}&switch_name=${encodeURIComponent(data.repName)}&admin_mode=1&v=${Date.now()}`;
       window.open(url, '_blank');
     } catch(e) {
       alert('Connection error — please try again');
