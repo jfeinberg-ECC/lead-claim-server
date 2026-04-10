@@ -510,7 +510,25 @@ wss.on('connection', (ws) => {
       }
 
       if (msg.type === 'expire') {
-        const { leadId, lead } = msg;
+        const { leadId } = msg;
+        let lead = msg.lead;
+        // Always fetch full lead from DB for queue storage
+        try {
+          const r = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+          if (r.rows.length > 0) {
+            const row = r.rows[0];
+            lead = {
+              id: row.id, leadType: row.lead_type, timezone: row.timezone,
+              withinCallingHours: row.within_calling_hours,
+              firstName: row.first_name, lastName: row.last_name,
+              phone: row.phone, email: row.email, companyName: row.company_name,
+              state: row.state, qualifyAmount: row.qualify_amount,
+              timeline: row.timeline, timeInBusiness: row.time_in_business,
+              monthlyRevenue: row.monthly_revenue, fundsUsedFor: row.funds_used_for,
+              conductsBusiness: row.conducts_business, campaignName: row.campaign_name,
+            };
+          }
+        } catch(e) {}
         await addToWaitingQueue(leadId, lead);
         await pool.query(
           'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
@@ -1080,15 +1098,16 @@ const LEAD_WARNING_MS = 90 * 60 * 1000;      // 90 minutes — warn rep
 
 async function checkLeadTimeouts() {
   try {
-    // Find all claimed but undisposed leads older than 90 minutes
-    // Exclude leads already in the waiting queue
+    // Find claimed but undisposed leads older than 90 minutes
+    // Only look at leads claimed in last 30 days, exclude already queued ones
     const result = await pool.query(`
-      SELECT e.lead_id, e.rep_name, e.created_at as claimed_at,
+      SELECT DISTINCT ON (e.lead_id) e.lead_id, e.rep_name, e.created_at as claimed_at,
         l.first_name, l.last_name
       FROM lead_events e
       JOIN leads l ON e.lead_id = l.id
       WHERE e.event_type = 'claimed'
       AND e.created_at < NOW() - INTERVAL '90 minutes'
+      AND l.received_at > NOW() - INTERVAL '30 days'
       AND NOT EXISTS (
         SELECT 1 FROM lead_events d
         WHERE d.lead_id = e.lead_id AND d.event_type IN ('disposed', 'timeout', 'passed')
@@ -1096,9 +1115,10 @@ async function checkLeadTimeouts() {
       AND NOT EXISTS (
         SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = e.lead_id
       )
+      ORDER BY e.lead_id, e.created_at DESC
     `);
     
-    // Also skip leads that are currently actively claimed in memory
+    // Skip leads currently active in memory
     const activeLeadIds = new Set(Object.values(repActiveLeads));
 
     for (const row of result.rows) {
@@ -1161,6 +1181,59 @@ async function checkLeadTimeouts() {
 
 // Run timeout check every 5 minutes
 setInterval(checkLeadTimeouts, 5 * 60 * 1000);
+
+// Recover orphaned leads — unclaimed leads not in waiting queue
+async function recoverOrphanedLeads() {
+  try {
+    const result = await pool.query(`
+      SELECT l.* FROM leads l
+      WHERE l.received_at > NOW() - INTERVAL '30 days'
+      AND NOT EXISTS (
+        SELECT 1 FROM lead_events e WHERE e.lead_id = l.id AND e.event_type IN ('disposed', 'timeout')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM lead_events e2 WHERE e2.lead_id = l.id AND e2.event_type = 'claimed'
+        AND NOT EXISTS (
+          SELECT 1 FROM lead_events d WHERE d.lead_id = l.id AND d.event_type IN ('disposed','timeout','passed')
+        )
+        AND e2.created_at > NOW() - INTERVAL '2 hours'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = l.id
+      )
+    `);
+    for (const r of result.rows) {
+      const lead = {
+        id: r.id, leadType: r.lead_type, timezone: r.timezone,
+        withinCallingHours: r.within_calling_hours,
+        firstName: r.first_name, lastName: r.last_name,
+        phone: r.phone, email: r.email, companyName: r.company_name,
+        state: r.state, qualifyAmount: r.qualify_amount,
+        timeline: r.timeline, timeInBusiness: r.time_in_business,
+        monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
+        conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
+      };
+      await pool.query(
+        'INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO NOTHING',
+        [r.id, JSON.stringify(lead)]
+      );
+      console.log(`Recovered orphaned lead: ${r.first_name} ${r.last_name}`);
+    }
+    if (result.rows.length > 0) {
+      console.log(`Recovered ${result.rows.length} orphaned leads to queue`);
+      // Broadcast updated queue to all clients
+      const queueResult = await pool.query('SELECT lead_id, lead_data, added_at FROM waiting_queue ORDER BY added_at ASC');
+      broadcastAll({ type: 'waiting_queue_init', queue: queueResult.rows });
+    }
+  } catch(err) {
+    console.error('Recovery error:', err);
+  }
+}
+
+// Run recovery every 2 minutes
+setInterval(recoverOrphanedLeads, 2 * 60 * 1000);
+// Also run on startup after DB init
+setTimeout(recoverOrphanedLeads, 5000);
 
 const PORT = process.env.PORT || 3000;
 initDB().then(() => {
