@@ -585,11 +585,56 @@ async function addToWaitingQueue(leadId, lead) {
 }
 
 async function handleDisposition({ lead, disposition, notes, repName }) {
-  const payload = { ...lead, notes, disposition, repName, disposedAt: new Date().toISOString() };
   if (['imn_app_taken', 'imn_app_sent'].includes(disposition)) {
-    await sendToZapier(process.env.ZAPIER_SALESFORCE_WEBHOOK, payload);
+    // Salesforce — send full lead + disposition info
+    const salesforcePayload = {
+      first_name: lead.firstName,
+      last_name: lead.lastName,
+      phone: lead.phone,
+      email: lead.email,
+      company_name: lead.companyName,
+      state: lead.state,
+      lead_type: lead.leadType,
+      qualify_amount: lead.qualifyAmount,
+      timeline: lead.timeline,
+      time_in_business: lead.timeInBusiness,
+      monthly_revenue: lead.monthlyRevenue,
+      funds_used_for: lead.fundsUsedFor,
+      conducts_business: lead.conductsBusiness,
+      campaign_name: lead.campaignName,
+      lead_source: lead.leadSource || 'Facebook',
+      disposition,
+      notes,
+      rep_name: repName,
+      disposed_at: new Date().toISOString(),
+      ...(lead.customFields || {})
+    };
+    await sendToZapier(process.env.ZAPIER_SALESFORCE_WEBHOOK, salesforcePayload);
+
   } else if (['left_message', 'no_answer', 'in_market_later'].includes(disposition)) {
-    await sendToZapier(process.env.ZAPIER_VANILLASOFT_WEBHOOK, payload);
+    // VanillaSoft — send only clean lead info for follow up
+    const vanillasoftPayload = {
+      first_name: lead.firstName,
+      last_name: lead.lastName,
+      phone: lead.phone,
+      email: lead.email,
+      company_name: lead.companyName,
+      state: lead.state,
+      lead_type: lead.leadType,
+      qualify_amount: lead.qualifyAmount,
+      timeline: lead.timeline,
+      time_in_business: lead.timeInBusiness,
+      monthly_revenue: lead.monthlyRevenue,
+      funds_used_for: lead.fundsUsedFor,
+      conducts_business: lead.conductsBusiness,
+      campaign_name: lead.campaignName,
+      lead_source: lead.leadSource || 'Facebook',
+      disposition,
+      rep_notes: notes,
+      rep_name: repName,
+      ...(lead.customFields || {})
+    };
+    await sendToZapier(process.env.ZAPIER_VANILLASOFT_WEBHOOK, vanillasoftPayload);
   }
 }
 
@@ -688,8 +733,16 @@ app.post('/rep/invite/:token/accept', async (req, res) => {
 // ── LEAD WEBHOOK ─────────────────────────────────────────────
 app.post('/webhook/lead', async (req, res) => {
   const body = req.body;
-  const phone = body.phone_number || body.phone || '';
-  const campaignName = (body.campaign_name || '').toLowerCase();
+  // Normalize field names — handle both snake_case and Title Case from Zapier
+  const normalize = (keys) => {
+    for (const k of keys) {
+      if (body[k] !== undefined && body[k] !== null && body[k] !== '') return body[k];
+    }
+    return '';
+  };
+
+  const phone = normalize(['phone_number', 'phone', 'Phone Number', 'Phone']);
+  const campaignName = (normalize(['campaign_name', 'Campaign Name']) || '').toLowerCase();
   const leadType = campaignName.includes('equipment') ? 'Equipment Financing' : 'Working Capital';
   const tz = getTimezoneForPhone(phone);
   const withinHours = isWithinCallingHours(phone);
@@ -699,32 +752,35 @@ app.post('/webhook/lead', async (req, res) => {
     'campaign_name','form_name','lead_source','qualify_amount','how_much_would_you_like_to_qualify_for',
     'timeline','how_soon_are_you_looking_for_funds','time_in_business','how_long_have_you_been_in_business',
     'monthly_revenue','whats_your_current_monthly_revenue','funds_used_for','what_will_the_funds_be_used_for',
-    'conducts_business','how_do_you_conduct_business'];
+    'conducts_business','how_do_you_conduct_business',
+    'First Name','Last Name','Phone Number','Phone','Email','Company Name','State',
+    'Campaign Name','Form Name','Lead Source','Qualify Amount','Timeline','Time In Business',
+    'Monthly Revenue','Use Of Funds','Conducts Business'];
   const customFields = {};
   Object.keys(body).forEach(key => {
     if (!knownFields.includes(key)) customFields[key] = body[key];
   });
 
-  const leadSource = body.lead_source || 'Facebook';
+  const leadSource = normalize(['lead_source', 'Lead Source']) || 'Facebook';
 
   const lead = {
     id: `lead_${Date.now()}`,
     receivedAt: new Date().toISOString(),
     leadType, timezone: tz, withinCallingHours: withinHours,
-    firstName: body.first_name || '',
-    lastName: body.last_name || '',
+    firstName: normalize(['first_name', 'First Name']),
+    lastName: normalize(['last_name', 'Last Name']),
     phone,
-    email: body.email || '',
-    companyName: body.company_name || '',
-    state: body.state || '',
-    qualifyAmount: body.qualify_amount || body.how_much_would_you_like_to_qualify_for || '',
-    timeline: body.timeline || body.how_soon_are_you_looking_for_funds || '',
-    timeInBusiness: body.time_in_business || body.how_long_have_you_been_in_business || '',
-    monthlyRevenue: body.monthly_revenue || body.whats_your_current_monthly_revenue || '',
-    fundsUsedFor: body.funds_used_for || body.what_will_the_funds_be_used_for || '',
-    conductsBusiness: body.conducts_business || body.how_do_you_conduct_business || '',
-    campaignName: body.campaign_name || '',
-    formName: body.form_name || '',
+    email: normalize(['email', 'Email']),
+    companyName: normalize(['company_name', 'Company Name']),
+    state: normalize(['state', 'State']),
+    qualifyAmount: normalize(['qualify_amount', 'Qualify Amount', 'how_much_would_you_like_to_qualify_for']),
+    timeline: normalize(['timeline', 'Timeline', 'how_soon_are_you_looking_for_funds']),
+    timeInBusiness: normalize(['time_in_business', 'Time In Business', 'how_long_have_you_been_in_business']),
+    monthlyRevenue: normalize(['monthly_revenue', 'Monthly Revenue', 'whats_your_current_monthly_revenue']),
+    fundsUsedFor: normalize(['funds_used_for', 'Use Of Funds', 'what_will_the_funds_be_used_for']),
+    conductsBusiness: normalize(['conducts_business', 'Conducts Business', 'how_do_you_conduct_business']),
+    campaignName: normalize(['campaign_name', 'Campaign Name']),
+    formName: normalize(['form_name', 'Form Name']),
     leadSource,
     customFields,
   };
@@ -1027,15 +1083,6 @@ app.get('/admin/export', requireAdmin, async (req, res) => {
 app.get('/admin/waiting', requireAdmin, async (req, res) => {
   const result = await pool.query('SELECT * FROM waiting_queue ORDER BY added_at ASC');
   res.json(result.rows);
-});
-
-// One-time admin password reset — remove after use
-app.get('/reset-admin-password', async (req, res) => {
-  const secret = req.query.secret;
-  if (secret !== 'voltlead-reset-2024') return res.status(403).json({ error: 'Forbidden' });
-  const hash = hashPassword('changeme123');
-  await pool.query('UPDATE admins SET password_hash = $1 WHERE username = $2', [hash, 'admin']);
-  res.json({ success: true, message: 'Admin password reset to changeme123' });
 });
 
 // ── REP RECENT LEADS ─────────────────────────────────────────
