@@ -1081,6 +1081,7 @@ const LEAD_WARNING_MS = 90 * 60 * 1000;      // 90 minutes — warn rep
 async function checkLeadTimeouts() {
   try {
     // Find all claimed but undisposed leads older than 90 minutes
+    // Exclude leads already in the waiting queue
     const result = await pool.query(`
       SELECT e.lead_id, e.rep_name, e.created_at as claimed_at,
         l.first_name, l.last_name
@@ -1090,15 +1091,24 @@ async function checkLeadTimeouts() {
       AND e.created_at < NOW() - INTERVAL '90 minutes'
       AND NOT EXISTS (
         SELECT 1 FROM lead_events d
-        WHERE d.lead_id = e.lead_id AND d.event_type = 'disposed'
+        WHERE d.lead_id = e.lead_id AND d.event_type IN ('disposed', 'timeout', 'passed')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = e.lead_id
       )
     `);
+    
+    // Also skip leads that are currently actively claimed in memory
+    const activeLeadIds = new Set(Object.values(repActiveLeads));
 
     for (const row of result.rows) {
       const claimedAt = new Date(row.claimed_at).getTime();
       const age = Date.now() - claimedAt;
       const leadId = row.lead_id;
       const repName = row.rep_name;
+      
+      // Skip if currently active in memory
+      if (activeLeadIds.has(leadId)) continue;
 
       if (age >= LEAD_TIMEOUT_MS) {
         // 2+ hours — release lead back to queue
