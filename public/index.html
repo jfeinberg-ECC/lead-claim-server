@@ -97,7 +97,7 @@
 
     .lead-cards { display: flex; flex-direction: column; gap: 12px; }
     .lead-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; overflow: hidden; }
-    .lead-card-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; }
+    /* lead-card-header defined above */
     .lead-type-badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px; }
     .badge-wc { background: #E1F5EE; color: #0F6E56; }
     .badge-ef { background: #E6F1FB; color: #0C447C; }
@@ -137,6 +137,13 @@
     .btn-wn  { border-color: #B4B2A9; color: #444441; } .btn-wn:hover  { background: #F1EFE8; }
 
     .disposed-banner { padding: 12px 16px; text-align: center; font-size: 13px; font-weight: 500; border-top: 1px solid #f0f0f0; }
+    .lead-card.collapsed .lead-card-body { display: none; }
+    .lead-card.collapsed .disposed-banner { display: none; }
+    .collapse-btn { background: none; border: none; cursor: pointer; font-size: 13px; color: #aaa; padding: 2px 8px; border-radius: 5px; margin-left: auto; }
+    .collapse-btn:hover { background: #f5f5f5; color: #666; }
+    .lead-card-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+    .lead-card-header:hover { background: #fafafa; }
+    .lead-card-summary { font-size: 12px; color: #888; margin-left: 10px; flex: 1; }
     .disposed-positive   { background: #E1F5EE; color: #085041; }
     .disposed-salesforce { background: #E6F1FB; color: #0C447C; }
     .disposed-negative   { background: #FCEBEB; color: #791F1F; }
@@ -372,6 +379,7 @@
     setInterval(updateClocks, 10000);
     checkNotifPermission();
     connectWS();
+    loadRecentLeads();
   }
 
   function setAvatar(picData, name) {
@@ -791,18 +799,20 @@
   }
 
   // ── LEAD CARDS ────────────────────────────────────────────
-  function addLeadCard(lead) {
+  function addLeadCard(lead, overrideTime) {
     if (!lead || document.getElementById('card-' + lead.id)) return;
     const empty = document.getElementById('empty-msg');
     if (empty) empty.style.display = 'none';
     const isWC = lead.leadType === 'Working Capital';
     const card = document.createElement('div');
     card.className = 'lead-card'; card.id = 'card-' + lead.id;
-    const timeStr = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const timeStr = overrideTime || new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     card.innerHTML = `
-      <div class="lead-card-header">
+      <div class="lead-card-header" onclick="toggleCollapse('${lead.id}')">
         <span class="lead-type-badge ${isWC?'badge-wc':'badge-ef'}">${lead.leadType}</span>
+        <span class="lead-card-summary" id="summary-${lead.id}"></span>
         <span class="lead-meta">${timeStr} · ${tzLabel(lead.timezone)}</span>
+        <button class="collapse-btn" id="collapse-btn-${lead.id}" title="Collapse">▼</button>
       </div>
       <div class="lead-card-body">
         <div class="lead-name">${lead.firstName} ${lead.lastName}</div>
@@ -871,6 +881,17 @@
     }
     ws.send(JSON.stringify({ type: 'dispose', leadId, repName, disposition, notes }));
     hasActiveLead = false; window._activeLeadData = null;
+    // Auto-collapse after disposing
+    setTimeout(() => {
+      const card = document.getElementById('card-'+leadId);
+      if (card) {
+        card.classList.add('collapsed');
+        const btn = document.getElementById('collapse-btn-'+leadId);
+        if (btn) btn.textContent = '▶';
+      }
+      const lead = window._lastDisposedLead || {};
+      setLeadSummary(leadId, (lead.firstName||'') + ' ' + (lead.lastName||''), disposition);
+    }, 1500);
     const group = disposedGroup(disposition);
     if (group === 'positive') countPositive++;
     if (group === 'salesforce') countSalesforce++;
@@ -884,10 +905,12 @@
     card.querySelectorAll('.dispose-btn').forEach(b => b.disabled = true);
     const notesEl = card.querySelector('.notes-input');
     if (notesEl) notesEl.disabled = true;
-    const banner = document.createElement('div');
-    banner.className = 'disposed-banner disposed-' + disposedGroup(disposition);
-    banner.textContent = disposedLabel(disposition);
-    card.appendChild(banner);
+    if (!card.querySelector('.disposed-banner')) {
+      const banner = document.createElement('div');
+      banner.className = 'disposed-banner disposed-' + disposedGroup(disposition);
+      banner.textContent = disposedLabel(disposition);
+      card.appendChild(banner);
+    }
   }
 
   function disposedGroup(d) {
@@ -910,6 +933,75 @@
     t.textContent = `📥 New ${lead.leadType} lead added to queue`;
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  function toggleCollapse(leadId) {
+    const card = document.getElementById('card-' + leadId);
+    if (!card) return;
+    const isCollapsed = card.classList.toggle('collapsed');
+    const btn = document.getElementById('collapse-btn-' + leadId);
+    if (btn) btn.textContent = isCollapsed ? '▶' : '▼';
+  }
+
+  function setLeadSummary(leadId, name, disposition) {
+    const el = document.getElementById('summary-' + leadId);
+    if (!el) return;
+    if (disposition) {
+      el.textContent = name + ' · ' + disposedLabel(disposition).replace(/^[✅📋❌]\s/, '').split('—')[1]?.trim() || disposition;
+      el.style.color = '#aaa';
+    } else {
+      el.textContent = name;
+    }
+  }
+
+  async function loadRecentLeads() {
+    try {
+      const res = await fetch(SERVER_URL + '/rep/recent-leads', {
+        headers: { 'x-rep-token': repToken }
+      });
+      if (!res.ok) return;
+      const leads = await res.json();
+      if (leads.length === 0) return;
+      leads.forEach(l => {
+        const lead = {
+          id: l.id, leadType: l.lead_type, timezone: l.timezone,
+          withinCallingHours: l.within_calling_hours,
+          firstName: l.first_name, lastName: l.last_name,
+          phone: l.phone, email: l.email, companyName: l.company_name,
+          state: l.state, qualifyAmount: l.qualify_amount,
+          timeline: l.timeline, timeInBusiness: l.time_in_business,
+          monthlyRevenue: l.monthly_revenue, fundsUsedFor: l.funds_used_for,
+          conductsBusiness: l.conducts_business,
+        };
+        // Add card with claimed time
+        if (!document.getElementById('card-' + lead.id)) {
+          addLeadCard(lead, new Date(l.claimed_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
+          myClaimed++;
+        }
+        // If disposed, mark it and collapse it
+        if (l.disposition) {
+          markDisposed(lead.id, l.disposition);
+          // Auto-collapse disposed leads from history
+          const card = document.getElementById('card-' + lead.id);
+          if (card) {
+            card.classList.add('collapsed');
+            const btn = document.getElementById('collapse-btn-' + lead.id);
+            if (btn) btn.textContent = '▶';
+          }
+          // Restore notes
+          const notesEl = document.getElementById('notes-' + lead.id);
+          if (notesEl && l.notes) notesEl.value = l.notes;
+          // Set summary
+          setLeadSummary(lead.id, lead.firstName + ' ' + lead.lastName, l.disposition);
+        } else {
+          // Active lead — mark as having an active lead
+          hasActiveLead = true;
+          window._activeLeadData = lead;
+          setLeadSummary(lead.id, lead.firstName + ' ' + lead.lastName, null);
+        }
+      });
+      updateStats();
+    } catch(e) { console.warn('Could not load recent leads:', e); }
   }
 
   function updateStats() {
