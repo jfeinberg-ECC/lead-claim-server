@@ -343,6 +343,7 @@
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
+    if (e.key === 'Escape') closeAccount();
   });
 
   async function logout() {
