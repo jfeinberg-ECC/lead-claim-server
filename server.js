@@ -471,10 +471,14 @@ wss.on('connection', (ws) => {
                   AND e.created_at > NOW() - INTERVAL '2 hours'
                   AND NOT EXISTS (
                     SELECT 1 FROM lead_events d
-                    WHERE d.lead_id = e.lead_id AND d.event_type IN ('disposed', 'timeout')
+                    WHERE d.lead_id = e.lead_id 
+                    AND d.event_type IN ('disposed', 'timeout', 'passed')
                   )
                   AND NOT EXISTS (
                     SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = e.lead_id
+                  )
+                  AND EXISTS (
+                    SELECT 1 FROM leads l WHERE l.id = e.lead_id
                   )
                   ORDER BY e.created_at DESC LIMIT 1
                 `, [verifiedName]);
