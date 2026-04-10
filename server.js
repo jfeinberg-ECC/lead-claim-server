@@ -930,11 +930,17 @@ app.get('/rep/recent-leads', requireRep, async (req, res) => {
 // ── ADMIN SWITCH TO REP ──────────────────────────────────────
 app.post('/admin/switch-to-rep', requireAdmin, async (req, res) => {
   const admin = req.admin;
-  // Check if admin already has a linked rep account
-  let repResult = await pool.query('SELECT * FROM reps WHERE email = $1', [admin.username + '@admin.voltlead']);
   let repId;
+  let repName = admin.username;
+
+  // First check if there's a rep account with matching email or name
+  let repResult = await pool.query(
+    'SELECT * FROM reps WHERE email = $1 OR name ILIKE $2 LIMIT 1',
+    [admin.username + '@admin.voltlead', admin.username]
+  );
+
   if (repResult.rows.length === 0) {
-    // Create a rep account for this admin automatically
+    // Create a linked rep account
     const insertResult = await pool.query(
       'INSERT INTO reps (name, email, password_hash, active) VALUES ($1, $2, $3, TRUE) RETURNING id',
       [admin.username, admin.username + '@admin.voltlead', 'admin-linked-account']
@@ -942,16 +948,16 @@ app.post('/admin/switch-to-rep', requireAdmin, async (req, res) => {
     repId = insertResult.rows[0].id;
   } else {
     repId = repResult.rows[0].id;
-    // Make sure it's active
+    repName = repResult.rows[0].name;
     await pool.query('UPDATE reps SET active = TRUE WHERE id = $1', [repId]);
   }
   // Create a short-lived one-time token (5 minutes)
   const token = generateToken();
   await pool.query(
-    "INSERT INTO rep_sessions (token, rep_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')",
+    "INSERT INTO rep_sessions (token, rep_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '8 hours')",
     [token, repId]
   );
-  res.json({ token, repName: admin.username });
+  res.json({ token, repName });
 });
 
 app.get('/health', (req, res) => {
