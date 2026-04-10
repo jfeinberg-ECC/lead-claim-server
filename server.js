@@ -1224,6 +1224,15 @@ setInterval(checkLeadTimeouts, 5 * 60 * 1000);
 // Recover orphaned leads — unclaimed leads not in waiting queue
 async function recoverOrphanedLeads() {
   try {
+    // First clean up any disposed leads that are still in the waiting queue
+    await pool.query(`
+      DELETE FROM waiting_queue wq
+      WHERE EXISTS (
+        SELECT 1 FROM lead_events e
+        WHERE e.lead_id = wq.lead_id
+        AND e.event_type IN ('disposed', 'timeout')
+      )
+    `);
     const result = await pool.query(`
       SELECT l.* FROM leads l
       WHERE l.received_at > NOW() - INTERVAL '30 days'
