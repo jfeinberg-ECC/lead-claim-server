@@ -3,31 +3,55 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lead Claim Board</title>
+  <title>Voltlead — Lead Claim Board</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #111; }
 
+    /* ── LOGIN ── */
     #login-screen { position: fixed; inset: 0; background: #f5f5f5; display: flex; align-items: center; justify-content: center; z-index: 200; }
-    .login-card { background: #fff; border-radius: 12px; border: 1px solid #e0e0e0; padding: 2.5rem; width: 340px; text-align: center; }
-    .login-card h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
-    .login-card p { font-size: 14px; color: #666; margin-bottom: 1.5rem; }
-    .login-card input { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-bottom: 12px; outline: none; }
+    .login-card { background: #fff; border-radius: 14px; border: 1px solid #e0e0e0; padding: 2.5rem; width: 360px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.07); }
+    .login-logo { font-size: 26px; font-weight: 800; color: #1D9E75; margin-bottom: 4px; letter-spacing: -0.5px; }
+    .login-logo span { color: #111; }
+    .login-sub { font-size: 13px; color: #888; margin-bottom: 1.8rem; }
+    .login-card input { width: 100%; padding: 11px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-bottom: 10px; outline: none; }
     .login-card input:focus { border-color: #1D9E75; }
-    .login-card button { width: 100%; padding: 11px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; }
+    .login-card button { width: 100%; padding: 12px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
     .login-card button:hover { background: #0F6E56; }
+    .login-error { color: #c0392b; font-size: 13px; margin-top: 8px; }
 
+    /* ── ACCOUNT MODAL ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 300; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .modal-overlay.active { opacity: 1; pointer-events: all; }
+    .modal { background: #fff; border-radius: 16px; padding: 2rem; max-width: 400px; width: 90%; }
+    .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 1.2rem; }
+    .modal-close { float: right; cursor: pointer; color: #aaa; font-size: 20px; line-height: 1; }
+    .modal-section { margin-bottom: 1.2rem; }
+    .modal-section label { font-size: 12px; color: #666; font-weight: 500; display: block; margin-bottom: 5px; }
+    .modal-section input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+    .modal-section input:focus { border-color: #1D9E75; }
+    .modal-btn { width: 100%; padding: 11px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+    .modal-btn:hover { background: #0F6E56; }
+    .modal-msg { font-size: 13px; margin-top: 8px; text-align: center; }
+    .modal-msg.success { color: #0F6E56; }
+    .modal-msg.error { color: #c0392b; }
+    .pic-upload-area { border: 2px dashed #ddd; border-radius: 10px; padding: 1.2rem; text-align: center; cursor: pointer; transition: border-color 0.15s; }
+    .pic-upload-area:hover { border-color: #1D9E75; }
+    .pic-preview { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin: 0 auto 8px; display: block; }
+    .pic-upload-label { font-size: 13px; color: #888; }
+
+    /* ── DASHBOARD ── */
     #dashboard { display: none; max-width: 960px; margin: 0 auto; padding: 1.5rem; }
     .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; }
-    .top-bar h1 { font-size: 20px; font-weight: 600; }
+    .top-bar-logo { font-size: 18px; font-weight: 800; color: #1D9E75; letter-spacing: -0.5px; }
+    .top-bar-logo span { color: #111; }
     .conn-status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #666; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
     .dot.live { background: #1D9E75; animation: pulse 2s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
     .notif-bar { background: #FFF8E1; border: 1px solid #FFE082; border-radius: 10px; padding: 10px 16px; font-size: 13px; color: #795548; margin-bottom: 1.2rem; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .notif-bar button { padding: 6px 14px; background: #F5A623; color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-    .notif-bar button:hover { background: #D4881A; }
+    .notif-bar button { padding: 6px 14px; background: #F5A623; color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
 
     .tz-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.2rem; }
     .tz-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 10px 14px; text-align: center; }
@@ -36,10 +60,13 @@
     .tz-time.in-hours { color: #1D9E75; }
     .tz-time.out-hours { color: #aaa; }
 
-    .agent-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; margin-bottom: 1.2rem; }
-    .avatar { width: 34px; height: 34px; border-radius: 50%; background: #CECBF6; color: #3C3489; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
-    .agent-name { font-size: 14px; font-weight: 500; }
+    .agent-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; margin-bottom: 1.2rem; cursor: pointer; transition: border-color 0.15s; }
+    .agent-bar:hover { border-color: #1D9E75; }
+    .avatar { width: 38px; height: 38px; border-radius: 50%; background: #CECBF6; color: #3C3489; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; overflow: hidden; flex-shrink: 0; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .agent-name { font-size: 14px; font-weight: 600; }
     .agent-sub { font-size: 12px; color: #888; }
+    .agent-edit-hint { font-size: 11px; color: #bbb; margin-left: auto; }
     .cooldown-bar { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888; }
     .cooldown-timer { font-weight: 600; color: #D85A30; }
 
@@ -63,7 +90,7 @@
     .waiting-badge.ef { background: #E6F1FB; color: #0C447C; }
     .waiting-meta { font-size: 12px; color: #888; }
     .waiting-age { font-size: 11px; color: #bbb; margin-left: auto; white-space: nowrap; }
-    .waiting-claim-btn { padding: 8px 16px; background: #F5A623; color: #fff; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.15s; }
+    .waiting-claim-btn { padding: 8px 16px; background: #F5A623; color: #fff; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
     .waiting-claim-btn:hover { background: #D4881A; }
     .waiting-claim-btn:disabled { background: #ccc; cursor: default; }
     .waiting-empty { text-align: center; padding: 1rem; color: #ccc; font-size: 13px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; }
@@ -100,14 +127,14 @@
     .dispose-btn { padding: 10px 8px; border-radius: 8px; border: 1px solid #e0e0e0; background: #fff; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; text-align: center; }
     .dispose-btn:hover { transform: translateY(-1px); }
     .dispose-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
-    .btn-imn-app   { border-color: #5DCAA5; color: #085041; background: #E1F5EE; } .btn-imn-app:hover   { background: #9FE1CB; }
-    .btn-imn-sent  { border-color: #9FE1CB; color: #085041; }                      .btn-imn-sent:hover  { background: #E1F5EE; }
-    .btn-lm        { border-color: #93C4F0; color: #0C447C; }                      .btn-lm:hover        { background: #E6F1FB; }
-    .btn-na        { border-color: #93C4F0; color: #0C447C; }                      .btn-na:hover        { background: #E6F1FB; }
-    .btn-iml       { border-color: #93C4F0; color: #0C447C; }                      .btn-iml:hover       { background: #E6F1FB; }
-    .btn-nq        { border-color: #F09595; color: #791F1F; }                      .btn-nq:hover        { background: #FCEBEB; }
-    .btn-ni        { border-color: #F09595; color: #791F1F; }                      .btn-ni:hover        { background: #FCEBEB; }
-    .btn-wn        { border-color: #B4B2A9; color: #444441; }                      .btn-wn:hover        { background: #F1EFE8; }
+    .btn-imn-app  { border-color: #5DCAA5; color: #085041; background: #E1F5EE; } .btn-imn-app:hover  { background: #9FE1CB; }
+    .btn-imn-sent { border-color: #9FE1CB; color: #085041; }                     .btn-imn-sent:hover { background: #E1F5EE; }
+    .btn-lm  { border-color: #93C4F0; color: #0C447C; } .btn-lm:hover  { background: #E6F1FB; }
+    .btn-na  { border-color: #93C4F0; color: #0C447C; } .btn-na:hover  { background: #E6F1FB; }
+    .btn-iml { border-color: #93C4F0; color: #0C447C; } .btn-iml:hover { background: #E6F1FB; }
+    .btn-nq  { border-color: #F09595; color: #791F1F; } .btn-nq:hover  { background: #FCEBEB; }
+    .btn-ni  { border-color: #F09595; color: #791F1F; } .btn-ni:hover  { background: #FCEBEB; }
+    .btn-wn  { border-color: #B4B2A9; color: #444441; } .btn-wn:hover  { background: #F1EFE8; }
 
     .disposed-banner { padding: 12px 16px; text-align: center; font-size: 13px; font-weight: 500; border-top: 1px solid #f0f0f0; }
     .disposed-positive   { background: #E1F5EE; color: #085041; }
@@ -143,23 +170,57 @@
 </head>
 <body>
 
+<!-- LOGIN -->
 <div id="login-screen">
   <div class="login-card">
-    <h1>Lead Claim Board</h1>
-    <p>Enter your name to go live</p>
-    <input type="text" id="name-input" placeholder="Your first name" maxlength="30" />
-    <button onclick="login()">Go Live</button>
+    <div class="login-logo">⚡ Volt<span>lead</span></div>
+    <div class="login-sub">Sign in to your account</div>
+    <input type="email" id="login-email" placeholder="Email address" autocomplete="email" />
+    <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
+    <button onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="login-error"></div>
   </div>
 </div>
 
+<!-- ACCOUNT MODAL -->
+<div class="modal-overlay" id="account-modal">
+  <div class="modal">
+    <span class="modal-close" onclick="closeAccount()">✕</span>
+    <h2>My Account</h2>
+    <div class="modal-section">
+      <label>Profile Picture</label>
+      <div class="pic-upload-area" onclick="document.getElementById('pic-input').click()">
+        <img id="pic-preview" src="" alt="" style="display:none" />
+        <div id="pic-placeholder">📷 Click to upload photo</div>
+        <div class="pic-upload-label" id="pic-label" style="margin-top:6px;font-size:12px;color:#aaa">Recommended: square image</div>
+      </div>
+      <input type="file" id="pic-input" accept="image/*" style="display:none" onchange="handlePicUpload(event)" />
+      <button class="modal-btn" onclick="savePic()" style="margin-top:10px">Save Photo</button>
+      <div class="modal-msg" id="pic-msg"></div>
+    </div>
+    <hr style="border:none;border-top:1px solid #f0f0f0;margin:1rem 0" />
+    <div class="modal-section">
+      <label>Change Password</label>
+      <input type="password" id="cur-pw" placeholder="Current password" style="margin-bottom:8px" />
+      <input type="password" id="new-pw" placeholder="New password (min 6 chars)" style="margin-bottom:8px" />
+      <input type="password" id="confirm-pw" placeholder="Confirm new password" />
+      <button class="modal-btn" onclick="savePassword()">Update Password</button>
+      <div class="modal-msg" id="pw-msg"></div>
+    </div>
+    <hr style="border:none;border-top:1px solid #f0f0f0;margin:1rem 0" />
+    <button class="modal-btn" onclick="logout()" style="background:#e74c3c">Sign Out</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
 <div id="dashboard">
   <div class="top-bar">
-    <h1>Lead Claim Board</h1>
+    <div class="top-bar-logo">⚡ Volt<span>lead</span></div>
     <div class="conn-status"><div class="dot" id="conn-dot"></div><span id="conn-label">Connecting...</span></div>
   </div>
 
   <div class="notif-bar" id="notif-bar" style="display:none">
-    🔔 Allow notifications so you're alerted when a new lead comes in — even if you're on another tab.
+    🔔 Allow notifications to be alerted when a new lead comes in — even on another tab.
     <button onclick="requestNotifPermission()">Allow Notifications</button>
   </div>
 
@@ -170,13 +231,14 @@
     <div class="tz-card"><div class="tz-label">Pacific</div><div class="tz-time" id="tz-pacific">--:--</div></div>
   </div>
 
-  <div class="agent-bar">
-    <div class="avatar" id="user-avatar">?</div>
+  <div class="agent-bar" onclick="openAccount()" title="Click to manage your account">
+    <div class="avatar" id="user-avatar"><span id="avatar-initials">?</span></div>
     <div>
       <div class="agent-name" id="user-name-display">...</div>
       <div class="agent-sub" id="shift-time">...</div>
     </div>
-    <div class="cooldown-bar" id="cooldown-bar" style="display:none">
+    <span class="agent-edit-hint">✏️ Edit profile</span>
+    <div class="cooldown-bar" id="cooldown-bar" style="display:none;margin-left:0">
       Next claim in <span class="cooldown-timer" id="cooldown-count">60</span>s
     </div>
   </div>
@@ -203,6 +265,7 @@
   </div>
 </div>
 
+<!-- CLAIM POPUP -->
 <div class="popup-overlay" id="popup-overlay">
   <div class="popup">
     <div class="popup-new">New Lead</div>
@@ -228,41 +291,182 @@
 <script>
   const SERVER_URL = 'https://lead-claim-server-production.up.railway.app';
   const WS_URL = SERVER_URL.replace('https', 'wss');
-  const LS_REP    = 'lcb_repName';
-  const LS_ACTIVE = 'lcb_activeLead';
-  const LS_STATS  = 'lcb_stats';
+  const LS_TOKEN    = 'vl_repToken';
+  const LS_REPNAME  = 'vl_repName';
+  const LS_ACTIVE   = 'vl_activeLead';
+  const LS_STATS    = 'vl_stats';
 
-  let repName = '', ws = null, currentLeadId = null, currentLead = null;
+  let repName = '', repToken = '', ws = null, currentLeadId = null, currentLead = null;
   let timerInterval = null, cooldownInterval = null, timeLeft = 30;
-  let myClaimed = 0, teamTotal = 0, countPositive = 0, countSalesforce = 0, countNegative = 0, pending = 0;
+  let myClaimed = 0, teamTotal = 0, countPositive = 0, countSalesforce = 0, countNegative = 0;
   let onCooldown = false, cooldownLeft = 0;
   let hasActiveLead = false;
   let waitingQueue = {};
+  let pendingPicData = null;
+
+  // ── AUTH ──────────────────────────────────────────────────
+  async function doLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    if (!email || !password) { errEl.textContent = 'Please enter your email and password'; return; }
+    try {
+      const res = await fetch(SERVER_URL + '/rep/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Login failed'; return; }
+      repToken = data.token;
+      repName = data.name;
+      localStorage.setItem(LS_TOKEN, repToken);
+      localStorage.setItem(LS_REPNAME, repName);
+      showDashboard(data);
+    } catch(e) {
+      errEl.textContent = 'Connection error — please try again';
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
+  });
+
+  async function logout() {
+    try { await fetch(SERVER_URL + '/rep/logout', { method: 'POST', headers: { 'x-rep-token': repToken } }); } catch(e) {}
+    localStorage.removeItem(LS_TOKEN);
+    localStorage.removeItem(LS_REPNAME);
+    localStorage.removeItem(LS_ACTIVE);
+    localStorage.removeItem(LS_STATS);
+    location.reload();
+  }
+
+  function showDashboard(repData) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('user-name-display').textContent = repName;
+    document.getElementById('shift-time').textContent = 'Shift started ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    setAvatar(repData.profilePic, repName);
+    loadState();
+    updateStats();
+    renderWaitingQueue();
+    updateClocks();
+    setInterval(updateClocks, 10000);
+    checkNotifPermission();
+    connectWS();
+  }
+
+  function setAvatar(picData, name) {
+    const avatarEl = document.getElementById('user-avatar');
+    const initialsEl = document.getElementById('avatar-initials');
+    if (picData) {
+      avatarEl.innerHTML = `<img src="${picData}" alt="${name}" />`;
+    } else {
+      avatarEl.innerHTML = `<span id="avatar-initials">${name.substring(0,2).toUpperCase()}</span>`;
+    }
+  }
+
+  // Auto-login if token saved
+  window.addEventListener('DOMContentLoaded', async () => {
+    const savedToken = localStorage.getItem(LS_TOKEN);
+    const savedName = localStorage.getItem(LS_REPNAME);
+    if (savedToken && savedName) {
+      repToken = savedToken;
+      repName = savedName;
+      try {
+        const res = await fetch(SERVER_URL + '/rep/me', { headers: { 'x-rep-token': repToken } });
+        if (res.ok) {
+          const data = await res.json();
+          repName = data.name;
+          showDashboard(data);
+        } else {
+          localStorage.removeItem(LS_TOKEN);
+        }
+      } catch(e) {}
+    }
+  });
+
+  // ── ACCOUNT MODAL ─────────────────────────────────────────
+  function openAccount() {
+    document.getElementById('account-modal').classList.add('active');
+  }
+  function closeAccount() {
+    document.getElementById('account-modal').classList.remove('active');
+    document.getElementById('pw-msg').textContent = '';
+    document.getElementById('pic-msg').textContent = '';
+    document.getElementById('cur-pw').value = '';
+    document.getElementById('new-pw').value = '';
+    document.getElementById('confirm-pw').value = '';
+  }
+
+  function handlePicUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      pendingPicData = e.target.result;
+      const preview = document.getElementById('pic-preview');
+      preview.src = pendingPicData;
+      preview.style.display = 'block';
+      document.getElementById('pic-placeholder').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function savePic() {
+    if (!pendingPicData) { document.getElementById('pic-msg').textContent = 'Please select a photo first'; return; }
+    const msg = document.getElementById('pic-msg');
+    try {
+      const res = await fetch(SERVER_URL + '/rep/profile-pic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-rep-token': repToken },
+        body: JSON.stringify({ imageData: pendingPicData })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        msg.className = 'modal-msg success'; msg.textContent = 'Photo saved!';
+        setAvatar(pendingPicData, repName);
+      } else {
+        msg.className = 'modal-msg error'; msg.textContent = data.error;
+      }
+    } catch(e) { msg.className = 'modal-msg error'; msg.textContent = 'Error saving photo'; }
+  }
+
+  async function savePassword() {
+    const cur = document.getElementById('cur-pw').value;
+    const nw = document.getElementById('new-pw').value;
+    const conf = document.getElementById('confirm-pw').value;
+    const msg = document.getElementById('pw-msg');
+    if (!cur || !nw || !conf) { msg.className = 'modal-msg error'; msg.textContent = 'All fields required'; return; }
+    if (nw !== conf) { msg.className = 'modal-msg error'; msg.textContent = 'Passwords do not match'; return; }
+    if (nw.length < 6) { msg.className = 'modal-msg error'; msg.textContent = 'Password must be at least 6 characters'; return; }
+    try {
+      const res = await fetch(SERVER_URL + '/rep/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-rep-token': repToken },
+        body: JSON.stringify({ currentPassword: cur, newPassword: nw })
+      });
+      const data = await res.json();
+      if (res.ok) { msg.className = 'modal-msg success'; msg.textContent = 'Password updated!'; document.getElementById('cur-pw').value=''; document.getElementById('new-pw').value=''; document.getElementById('confirm-pw').value=''; }
+      else { msg.className = 'modal-msg error'; msg.textContent = data.error; }
+    } catch(e) { msg.className = 'modal-msg error'; msg.textContent = 'Error updating password'; }
+  }
 
   // ── LOCALSTORAGE ─────────────────────────────────────────
   function saveState() {
-    if (repName) localStorage.setItem(LS_REP, repName);
     localStorage.setItem(LS_ACTIVE, JSON.stringify(hasActiveLead ? (window._activeLeadData || null) : null));
     localStorage.setItem(LS_STATS, JSON.stringify({ myClaimed, teamTotal, countPositive, countSalesforce, countNegative }));
-    if (onCooldown && cooldownLeft > 0) {
-      localStorage.setItem('lcb_cooldownUntil', Date.now() + cooldownLeft * 1000);
-    } else {
-      localStorage.removeItem('lcb_cooldownUntil');
-    }
+    if (onCooldown && cooldownLeft > 0) localStorage.setItem('vl_cooldownUntil', Date.now() + cooldownLeft * 1000);
+    else localStorage.removeItem('vl_cooldownUntil');
   }
 
   function loadState() {
     try {
       const stats = JSON.parse(localStorage.getItem(LS_STATS) || '{}');
-      myClaimed       = stats.myClaimed       || 0;
-      teamTotal       = stats.teamTotal       || 0;
-      countPositive   = stats.countPositive   || 0;
-      countSalesforce = stats.countSalesforce || 0;
-      countNegative   = stats.countNegative   || 0;
+      myClaimed = stats.myClaimed || 0; teamTotal = stats.teamTotal || 0;
+      countPositive = stats.countPositive || 0; countSalesforce = stats.countSalesforce || 0; countNegative = stats.countNegative || 0;
       const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
       if (active) { window._activeLeadData = active; hasActiveLead = true; addLeadCard(active); }
-      // restore cooldown
-      const until = parseInt(localStorage.getItem('lcb_cooldownUntil') || '0');
+      const until = parseInt(localStorage.getItem('vl_cooldownUntil') || '0');
       const remaining = Math.ceil((until - Date.now()) / 1000);
       if (remaining > 0) startCooldown(remaining);
     } catch(e) { console.warn('State load error', e); }
@@ -273,36 +477,29 @@
     if (!('Notification' in window)) return;
     if (Notification.permission === 'default') document.getElementById('notif-bar').style.display = 'flex';
   }
-
   function requestNotifPermission() {
     Notification.requestPermission().then(() => document.getElementById('notif-bar').style.display = 'none');
   }
-
   function sendNotification(lead) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    const n = new Notification('🔥 New Lead — ' + lead.leadType, {
+    const n = new Notification('⚡ New Lead — ' + lead.leadType, {
       body: `${tzLabel(lead.timezone)} timezone · Click to claim`,
-      icon: SERVER_URL + '/favicon.ico',
-      requireInteraction: true,
-      tag: 'lead-' + lead.id
+      requireInteraction: true, tag: 'lead-' + lead.id
     });
     n.onclick = () => { window.focus(); n.close(); };
   }
 
   // ── CLOCKS ────────────────────────────────────────────────
   const TZ_ZONES = [
-    { id: 'tz-eastern',  tz: 'America/New_York' },
-    { id: 'tz-central',  tz: 'America/Chicago' },
-    { id: 'tz-mountain', tz: 'America/Denver' },
-    { id: 'tz-pacific',  tz: 'America/Los_Angeles' },
+    { id: 'tz-eastern', tz: 'America/New_York' }, { id: 'tz-central', tz: 'America/Chicago' },
+    { id: 'tz-mountain', tz: 'America/Denver' },  { id: 'tz-pacific', tz: 'America/Los_Angeles' },
   ];
-
   function updateClocks() {
     const now = new Date();
     TZ_ZONES.forEach(({ id, tz }) => {
       const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true }).formatToParts(now);
-      const h  = parts.find(p => p.type === 'hour').value;
-      const m  = parts.find(p => p.type === 'minute').value;
+      const h = parts.find(p => p.type === 'hour').value;
+      const m = parts.find(p => p.type === 'minute').value;
       const ap = (parts.find(p => p.type === 'dayperiod' || p.type === 'dayPeriod') || {}).value || '';
       const el = document.getElementById(id);
       el.textContent = `${h}:${m} ${ap}`;
@@ -313,33 +510,6 @@
     });
   }
 
-  // ── LOGIN ─────────────────────────────────────────────────
-  window.addEventListener('DOMContentLoaded', () => {
-    const p = new URLSearchParams(window.location.search);
-    const auto = p.get('rep') || localStorage.getItem(LS_REP);
-    if (auto) { document.getElementById('name-input').value = auto; login(); }
-  });
-
-  function login() {
-    const input = document.getElementById('name-input').value.trim();
-    if (!input) return;
-    repName = input;
-    localStorage.setItem(LS_REP, repName);
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('dashboard').style.display = 'block';
-    document.getElementById('user-name-display').textContent = repName;
-    document.getElementById('user-avatar').textContent = repName.substring(0,2).toUpperCase();
-    document.getElementById('shift-time').textContent = 'Shift started ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-    loadState();
-    updateStats();
-    renderWaitingQueue();
-    updateClocks();
-    setInterval(updateClocks, 10000);
-    checkNotifPermission();
-    connectWS();
-  }
-  document.getElementById('name-input').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
-
   // ── WEBSOCKET ─────────────────────────────────────────────
   function connectWS() {
     ws = new WebSocket(WS_URL);
@@ -348,95 +518,61 @@
     ws.onerror = () => ws.close();
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-
       if (msg.type === 'waiting_queue_init') {
-        msg.queue.forEach(row => {
-          const lead = row.lead_data;
-          if (!waitingQueue[lead.id]) waitingQueue[lead.id] = { lead, addedAt: new Date(row.added_at).getTime() };
-        });
-        renderWaitingQueue();
-        updateStats();
+        msg.queue.forEach(row => { const lead = row.lead_data; if (!waitingQueue[lead.id]) waitingQueue[lead.id] = { lead, addedAt: new Date(row.added_at).getTime() }; });
+        renderWaitingQueue(); updateStats();
       }
-
-      if (msg.type === 'lead_waiting') {
-        addToWaiting(msg.lead, new Date(msg.addedAt).getTime());
-      }
-
+      if (msg.type === 'lead_waiting') addToWaiting(msg.lead, new Date(msg.addedAt).getTime());
       if (msg.type === 'new_lead') {
         sendNotification(msg.lead);
         if (onCooldown || hasActiveLead) {
-          // Rep is busy — silently add to waiting queue, no popup
           addToWaiting(msg.lead);
-          // Show a brief toast so rep knows a lead came in
           showLeadToast(msg.lead);
         } else {
-          pending++;
-          updateStats();
           showPopup(msg.lead);
         }
       }
-
       if (msg.type === 'claim_success') {
         window._activeLeadData = msg.lead;
         addLeadCard(msg.lead);
-        myClaimed++;
-        hasActiveLead = true;
+        myClaimed++; hasActiveLead = true;
         removeFromWaiting(msg.lead.id);
-        pending = Math.max(0, pending - 1);
-        updateStats();
-        startCooldown(60);
-        dismissPopup();
-        saveState();
+        updateStats(); startCooldown(60); dismissPopup(); saveState();
       }
-
       if (msg.type === 'claim_failed') {
         showResult(false, msg.claimedBy);
         removeFromWaiting(msg.leadId);
-        pending = Math.max(0, pending - 1);
-        updateStats();
-        saveState();
+        updateStats(); saveState();
       }
-
       if (msg.type === 'claim_blocked') {
         const r = document.getElementById('p-result');
         const btn = document.getElementById('p-btn');
         r.className = 'popup-result failed';
-        // Reset button so rep can see the message clearly
         if (btn) { btn.textContent = 'Cannot Claim'; btn.style.background = '#aaa'; btn.disabled = true; }
         if (msg.reason === 'cooldown') {
-          // Show live countdown — rep must wait
           let secsLeft = msg.secondsLeft;
-          r.textContent = `⏱ Please wait ${secsLeft} seconds before claiming another lead`;
+          r.textContent = `⏱ Please wait ${secsLeft}s before claiming another lead`;
           clearInterval(timerInterval);
           timerInterval = setInterval(() => {
             secsLeft--;
             if (secsLeft <= 0) {
               clearInterval(timerInterval);
-              // Re-enable claim button when cooldown expires
               if (btn) { btn.textContent = 'Claim this lead'; btn.style.background = ''; btn.disabled = false; }
               r.textContent = '✅ Cooldown complete — you can now claim!';
               r.className = 'popup-result success';
             } else {
-              r.textContent = `⏱ Please wait ${secsLeft} seconds before claiming another lead`;
+              r.textContent = `⏱ Please wait ${secsLeft}s before claiming another lead`;
             }
           }, 1000);
-        } else if (msg.reason === 'active_lead') {
-          r.textContent = '⚠️ You must dispose your current lead before claiming a new one.';
+        } else {
+          r.textContent = '⚠️ Dispose your current lead before claiming a new one.';
           setTimeout(dismissPopup, 3000);
         }
       }
-
       if (msg.type === 'lead_claimed') {
-        teamTotal++;
-        removeFromWaiting(msg.leadId);
-        pending = Math.max(0, pending - 1);
-        updateStats();
-        saveState();
+        teamTotal++; removeFromWaiting(msg.leadId); updateStats(); saveState();
       }
-
-      if (msg.type === 'lead_disposed') {
-        markDisposed(msg.leadId, msg.disposition);
-      }
+      if (msg.type === 'lead_disposed') markDisposed(msg.leadId, msg.disposition);
     };
   }
 
@@ -447,8 +583,7 @@
 
   // ── POPUP ─────────────────────────────────────────────────
   function showPopup(lead) {
-    currentLeadId = lead.id;
-    currentLead = lead;
+    currentLeadId = lead.id; currentLead = lead;
     const isWC = lead.leadType === 'Working Capital';
     const typeEl = document.getElementById('p-type');
     typeEl.textContent = lead.leadType;
@@ -456,7 +591,6 @@
     document.getElementById('p-tz').textContent = 'Lead timezone: ' + tzLabel(lead.timezone);
     document.getElementById('p-warn').style.display = lead.withinCallingHours ? 'none' : 'block';
     document.getElementById('p-result').textContent = '';
-
     const locked = hasActiveLead;
     document.getElementById('p-locked').style.display = locked ? 'block' : 'none';
     document.getElementById('p-timer-row').style.display = locked ? 'none' : 'block';
@@ -464,7 +598,6 @@
     document.getElementById('p-btn').disabled = locked;
     document.getElementById('p-btn').style.background = locked ? '#aaa' : '';
     document.getElementById('popup-overlay').classList.add('active');
-
     if (!locked) {
       timeLeft = 30;
       document.getElementById('p-countdown').textContent = timeLeft;
@@ -478,8 +611,6 @@
         if (timeLeft <= 0) {
           clearInterval(timerInterval);
           if (ws) ws.send(JSON.stringify({ type: 'expire', leadId: lead.id, lead, repName }));
-          pending = Math.max(0, pending - 1);
-          updateStats();
           dismissPopup();
         }
       }, 1000);
@@ -498,8 +629,6 @@
     clearInterval(timerInterval);
     if (currentLead && ws) {
       ws.send(JSON.stringify({ type: 'pass', leadId: currentLead.id, lead: currentLead, repName }));
-      pending = Math.max(0, pending - 1);
-      updateStats();
     }
     dismissPopup();
   }
@@ -513,13 +642,8 @@
   function showResult(success, claimedBy) {
     const r = document.getElementById('p-result');
     const btn = document.getElementById('p-btn');
-    if (success) {
-      r.textContent = 'You got it!'; r.className = 'popup-result success';
-      btn.textContent = 'Claimed!'; btn.style.background = '#0F6E56';
-    } else {
-      r.textContent = (claimedBy||'Someone') + ' got there first.'; r.className = 'popup-result failed';
-      btn.textContent = 'Too slow'; btn.style.background = '#aaa';
-    }
+    if (success) { r.textContent = 'You got it!'; r.className = 'popup-result success'; btn.textContent = 'Claimed!'; btn.style.background = '#0F6E56'; }
+    else { r.textContent = (claimedBy||'Someone') + ' got there first.'; r.className = 'popup-result failed'; btn.textContent = 'Too slow'; btn.style.background = '#aaa'; }
     btn.disabled = true;
     setTimeout(dismissPopup, 2500);
   }
@@ -528,20 +652,16 @@
   function addToWaiting(lead, addedAt) {
     if (waitingQueue[lead.id]) return;
     waitingQueue[lead.id] = { lead, addedAt: addedAt || Date.now() };
-    renderWaitingQueue();
-    updateStats();
+    renderWaitingQueue(); updateStats();
   }
-
   function removeFromWaiting(leadId) {
     if (!waitingQueue[leadId]) return;
     delete waitingQueue[leadId];
-    renderWaitingQueue();
-    updateStats();
+    renderWaitingQueue(); updateStats();
   }
-
   function renderWaitingQueue() {
     const container = document.getElementById('waiting-cards');
-    const emptyEl   = document.getElementById('waiting-empty');
+    const emptyEl = document.getElementById('waiting-empty');
     container.querySelectorAll('.waiting-card').forEach(el => el.remove());
     const ids = Object.keys(waitingQueue);
     if (ids.length === 0) { emptyEl.style.display = 'block'; return; }
@@ -552,8 +672,7 @@
       const ageSec = Math.floor((Date.now() - addedAt) / 1000);
       const ageStr = ageSec < 60 ? `${ageSec}s ago` : ageSec < 3600 ? `${Math.floor(ageSec/60)}m ago` : ageSec < 86400 ? `${Math.floor(ageSec/3600)}h ago` : `${Math.floor(ageSec/86400)}d ago`;
       const row = document.createElement('div');
-      row.className = 'waiting-card';
-      row.id = 'waiting-' + id;
+      row.className = 'waiting-card'; row.id = 'waiting-' + id;
       row.innerHTML = `
         <div class="waiting-card-info">
           <span class="waiting-badge ${isWC ? 'wc' : 'ef'}">${lead.leadType}</span>
@@ -565,15 +684,14 @@
       container.appendChild(row);
     });
   }
-
   function claimFromQueue(leadId) {
     if (!ws) return;
     if (hasActiveLead) { alert('Dispose your current lead before claiming a new one.'); return; }
+    if (onCooldown) { alert(`Please wait ${cooldownLeft} seconds before claiming another lead.`); return; }
     const btn = document.getElementById('wclaim-' + leadId);
     if (btn) { btn.textContent = 'Claiming...'; btn.disabled = true; }
     ws.send(JSON.stringify({ type: 'claim', leadId, repName }));
   }
-
   setInterval(() => { if (Object.keys(waitingQueue).length > 0) renderWaitingQueue(); }, 30000);
 
   // ── COOLDOWN ──────────────────────────────────────────────
@@ -592,11 +710,10 @@
         onCooldown = false;
         document.getElementById('cooldown-bar').style.display = 'none';
         document.getElementById('cooldown-overlay').classList.remove('active');
-        localStorage.removeItem('lcb_cooldownUntil');
+        localStorage.removeItem('vl_cooldownUntil');
       }
     }, 1000);
   }
-
   function updateCooldownDisplay() {
     document.getElementById('cooldown-count').textContent = cooldownLeft;
     document.getElementById('co-count').textContent = cooldownLeft;
@@ -609,8 +726,7 @@
     if (empty) empty.style.display = 'none';
     const isWC = lead.leadType === 'Working Capital';
     const card = document.createElement('div');
-    card.className = 'lead-card';
-    card.id = 'card-' + lead.id;
+    card.className = 'lead-card'; card.id = 'card-' + lead.id;
     const timeStr = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     card.innerHTML = `
       <div class="lead-card-header">
@@ -662,18 +778,16 @@
   }
 
   function copyPhone(phone) {
-    const clean = (phone || '').replace(/\D/g, '');
-    navigator.clipboard.writeText(clean).then(() => {
-      const toast = document.getElementById('copy-toast');
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 2000);
+    navigator.clipboard.writeText((phone||'').replace(/\D/g,'')).then(() => {
+      const t = document.getElementById('copy-toast');
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
     });
   }
 
   function dispose(leadId, disposition) {
     const notes = document.getElementById('notes-'+leadId)?.value || '';
     if (!ws) return;
-    // Notes required for dispositions where a conversation was had
     const requiresNote = ['imn_app_taken','imn_app_sent','in_market_later','not_qualified','not_interested','wrong_number'];
     const notesEl = document.getElementById('notes-'+leadId);
     if (requiresNote.includes(disposition) && notesEl && !notes.trim()) {
@@ -681,23 +795,16 @@
       notesEl.style.borderColor = '#e74c3c';
       notesEl.style.boxShadow = '0 0 0 3px rgba(231,76,60,0.15)';
       notesEl.placeholder = '⚠️ Notes are required for this disposition';
-      setTimeout(() => {
-        notesEl.style.borderColor = '';
-        notesEl.style.boxShadow = '';
-        notesEl.placeholder = 'Add call notes here...';
-      }, 3000);
+      setTimeout(() => { notesEl.style.borderColor = ''; notesEl.style.boxShadow = ''; notesEl.placeholder = 'Add call notes here...'; }, 3000);
       return;
     }
     ws.send(JSON.stringify({ type: 'dispose', leadId, repName, disposition, notes }));
-    hasActiveLead = false;
-    window._activeLeadData = null;
+    hasActiveLead = false; window._activeLeadData = null;
     const group = disposedGroup(disposition);
-    if (group === 'positive')    countPositive++;
-    if (group === 'salesforce')  countSalesforce++;
-    if (group === 'negative')    countNegative++;
-    updateStats();
-    markDisposed(leadId, disposition);
-    saveState();
+    if (group === 'positive') countPositive++;
+    if (group === 'salesforce') countSalesforce++;
+    if (group === 'negative') countNegative++;
+    updateStats(); markDisposed(leadId, disposition); saveState();
   }
 
   function markDisposed(leadId, disposition) {
@@ -707,39 +814,40 @@
     const notesEl = card.querySelector('.notes-input');
     if (notesEl) notesEl.disabled = true;
     const banner = document.createElement('div');
-    const group = disposedGroup(disposition);
-    banner.className = 'disposed-banner disposed-' + group;
+    banner.className = 'disposed-banner disposed-' + disposedGroup(disposition);
     banner.textContent = disposedLabel(disposition);
     card.appendChild(banner);
   }
 
   function disposedGroup(d) {
-    if (['imn_app_taken','imn_app_sent'].includes(d))               return 'positive';
+    if (['imn_app_taken','imn_app_sent'].includes(d)) return 'positive';
     if (['left_message','no_answer','in_market_later'].includes(d)) return 'salesforce';
     return 'negative';
   }
-
   function disposedLabel(d) {
     const map = {
-      imn_app_taken:   '✅ Sent to Salesforce — IMN App Taken',
-      imn_app_sent:    '✅ Sent to Salesforce — IMN App Sent',
-      left_message:    '📋 Sent to VanillaSoft — Left Message',
-      no_answer:       '📋 Sent to VanillaSoft — No Answer',
-      in_market_later: '📋 Sent to VanillaSoft — In Market Later',
-      not_qualified:   '❌ Archived — Not Qualified',
-      not_interested:  '❌ Archived — Not Interested',
-      wrong_number:    '❌ Archived — Wrong Number',
+      imn_app_taken:'✅ Sent to Salesforce — IMN App Taken', imn_app_sent:'✅ Sent to Salesforce — IMN App Sent',
+      left_message:'📋 Sent to VanillaSoft — Left Message', no_answer:'📋 Sent to VanillaSoft — No Answer',
+      in_market_later:'📋 Sent to VanillaSoft — In Market Later', not_qualified:'❌ Archived — Not Qualified',
+      not_interested:'❌ Archived — Not Interested', wrong_number:'❌ Archived — Wrong Number',
     };
     return map[d] || d;
   }
 
+  function showLeadToast(lead) {
+    const t = document.getElementById('copy-toast');
+    t.textContent = `📥 New ${lead.leadType} lead added to queue`;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
   function updateStats() {
-    document.getElementById('s-mine').textContent        = myClaimed;
-    document.getElementById('s-team').textContent        = teamTotal;
-    document.getElementById('s-positive').textContent    = countPositive;
-    document.getElementById('s-salesforce').textContent  = countSalesforce;
-    document.getElementById('s-negative').textContent    = countNegative;
-    document.getElementById('s-waiting').textContent     = Object.keys(waitingQueue).length;
+    document.getElementById('s-mine').textContent = myClaimed;
+    document.getElementById('s-team').textContent = teamTotal;
+    document.getElementById('s-positive').textContent = countPositive;
+    document.getElementById('s-salesforce').textContent = countSalesforce;
+    document.getElementById('s-negative').textContent = countNegative;
+    document.getElementById('s-waiting').textContent = Object.keys(waitingQueue).length;
   }
 
   function formatPhone(phone) {
@@ -748,21 +856,8 @@
     const m = d.match(/^(\d{3})(\d{3})(\d{4})$/);
     return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
   }
-
-  function showLeadToast(lead) {
-    const toast = document.getElementById('copy-toast');
-    const isWC = lead.leadType === 'Working Capital';
-    toast.textContent = `📥 New ${isWC ? 'Working Capital' : 'Equipment Financing'} lead added to queue`;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 4000);
-  }
-
   function tzLabel(tz) {
-    const map = {
-      'America/New_York':'Eastern','America/Chicago':'Central',
-      'America/Denver':'Mountain','America/Los_Angeles':'Pacific',
-      'America/Phoenix':'Arizona','Pacific/Honolulu':'Hawaii','America/Anchorage':'Alaska'
-    };
+    const map = { 'America/New_York':'Eastern','America/Chicago':'Central','America/Denver':'Mountain','America/Los_Angeles':'Pacific','America/Phoenix':'Arizona','Pacific/Honolulu':'Hawaii','America/Anchorage':'Alaska' };
     return map[tz] || tz;
   }
 </script>
