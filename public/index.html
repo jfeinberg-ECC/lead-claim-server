@@ -293,9 +293,9 @@
     <div class="popup-type" id="p-type">Working Capital</div>
     <div class="popup-tz" id="p-tz"></div>
     <div class="popup-hours-warn" id="p-warn" style="display:none">
-      ⏰ Outside calling hours in lead's timezone<br>
-      <span style="font-size:12px;opacity:0.85">Calling hours start in <strong id="p-hours-countdown">--:--:--</strong></span><br>
-      <span style="font-size:11px;opacity:0.7;margin-top:4px;display:block">You can still claim this lead now</span>
+      🔒 Outside calling hours — cannot claim yet<br>
+      <span style="font-size:13px;font-weight:700;margin-top:6px;display:block">Calling hours start in <strong id="p-hours-countdown">--:--:--</strong></span>
+      <span style="font-size:11px;opacity:0.7;margin-top:4px;display:block">Lead will be available to claim at 8:00 AM in lead's timezone</span>
     </div>
     <div class="popup-locked" id="p-locked" style="display:none">⚠️ Dispose your current lead before claiming a new one</div>
     <div class="popup-timer" id="p-timer-row">Expires in <span id="p-countdown">30</span>s</div>
@@ -660,6 +660,9 @@
               r.textContent = `⏱ Please wait ${secsLeft}s before claiming another lead`;
             }
           }, 1000);
+        } else if (msg.reason === 'outside_hours') {
+          r.textContent = '🔒 Cannot claim — lead is outside calling hours.';
+          setTimeout(dismissPopup, 3000);
         } else {
           r.textContent = '⚠️ Dispose your current lead before claiming a new one.';
           setTimeout(dismissPopup, 3000);
@@ -687,16 +690,29 @@
     document.getElementById('p-tz').textContent = 'Lead timezone: ' + tzLabel(lead.timezone);
     const outsideHours = !lead.withinCallingHours;
     document.getElementById('p-warn').style.display = outsideHours ? 'block' : 'none';
-    // Start live countdown if outside hours
     if (outsideHours && lead.timezone) {
+      // Block claim button
+      const btn = document.getElementById('p-btn');
+      btn.disabled = true;
+      btn.style.background = '#aaa';
+      btn.textContent = '🔒 Locked — Outside Calling Hours';
+      document.getElementById('p-timer-row').style.display = 'none';
+      // Live countdown
       clearInterval(window._hoursCountdownInterval);
       const updateCountdown = () => {
         const secs = secondsUntilCallingHours(lead.timezone);
         const el = document.getElementById('p-hours-countdown');
         if (el) el.textContent = formatCountdown(secs);
+        // When calling hours start, close popup — lead stays in queue to claim
+        if (secs === 0) {
+          clearInterval(window._hoursCountdownInterval);
+          dismissPopup();
+        }
       };
       updateCountdown();
       window._hoursCountdownInterval = setInterval(updateCountdown, 1000);
+      // Pass lead to queue immediately since it can't be claimed now
+      if (ws) ws.send(JSON.stringify({ type: 'pass', leadId: lead.id, lead, repName }));
     }
     document.getElementById('p-result').textContent = '';
     const locked = hasActiveLead;
@@ -830,6 +846,15 @@
     if (!ws) return;
     if (hasActiveLead) { alert('Dispose your current lead before claiming a new one.'); return; }
     if (onCooldown) { alert(`Please wait ${cooldownLeft} seconds before claiming another lead.`); return; }
+    // Check if lead is outside calling hours
+    const qItem = waitingQueue[leadId];
+    if (qItem && qItem.lead && qItem.lead.timezone) {
+      const secs = secondsUntilCallingHours(qItem.lead.timezone);
+      if (secs > 0) {
+        alert(`This lead cannot be claimed yet — calling hours start in ${formatCountdown(secs)} in the lead's timezone.`);
+        return;
+      }
+    }
     const btn = document.getElementById('wclaim-' + leadId);
     if (btn) { btn.textContent = 'Claiming...'; btn.disabled = true; }
     ws.send(JSON.stringify({ type: 'claim', leadId, repName }));
