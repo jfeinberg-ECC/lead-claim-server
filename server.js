@@ -403,7 +403,18 @@ wss.on('connection', (ws) => {
       }
 
       if (msg.type === 'dispose') {
-        const { leadId, repName, disposition, notes } = msg;
+        const { leadId, disposition, notes, repToken: msgRepToken } = msg;
+        let repName = msg.repName;
+        // Verify via token for consistent naming
+        if (msgRepToken) {
+          try {
+            const tr = await pool.query(
+              'SELECT r.name FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW()',
+              [msgRepToken]
+            );
+            if (tr.rows.length > 0) repName = tr.rows[0].name;
+          } catch(e) {}
+        }
         const lead = leadData[leadId] || {};
         handleDisposition({ lead, disposition, notes, repName });
         if (repActiveLeads[repName] === leadId) delete repActiveLeads[repName];
@@ -934,9 +945,13 @@ app.get('/reset-admin-password', async (req, res) => {
 
 // ── REP RECENT LEADS ─────────────────────────────────────────
 app.get('/rep/recent-leads', requireRep, async (req, res) => {
-  const repName = req.rep.name;
-  // Query by rep name — also include any alternate names this rep may have used
-  // by checking all names associated with this rep's id via sessions
+  const rep = req.rep;
+  // Get all names this rep has ever used (first_name+last_name combos + current name)
+  const possibleNames = [rep.name];
+  if (rep.first_name && rep.last_name) {
+    possibleNames.push(`${rep.first_name} ${rep.last_name}`);
+  }
+  // Also check any name stored in lead_events that could match this rep's email pattern
   const result = await pool.query(`
     SELECT DISTINCT ON (l.id) l.*,
       e_claim.created_at as claimed_at,
@@ -946,9 +961,9 @@ app.get('/rep/recent-leads', requireRep, async (req, res) => {
     JOIN lead_events e_claim ON l.id = e_claim.lead_id AND e_claim.event_type = 'claimed'
     LEFT JOIN lead_events e_dispose ON l.id = e_dispose.lead_id AND e_dispose.event_type = 'disposed'
     WHERE l.received_at > NOW() - INTERVAL '30 days'
-    AND e_claim.rep_name = $1
+    AND e_claim.rep_name = ANY($1)
     ORDER BY l.id, e_claim.created_at DESC
-  `, [repName]);
+  `, [possibleNames]);
   res.json(result.rows);
 });
 
