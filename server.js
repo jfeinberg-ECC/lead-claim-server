@@ -307,6 +307,15 @@ wss.on('connection', (ws) => {
       }
     }).catch(err => console.error('Queue fetch error:', err));
 
+  // Send rep their server-side state so client stays in sync
+  ws.on('message-init', async (repName) => {
+    if (repActiveLeads[repName]) {
+      ws.send(JSON.stringify({ type: 'server_state', hasActiveLead: true, activeLeadId: repActiveLeads[repName] }));
+    } else {
+      ws.send(JSON.stringify({ type: 'server_state', hasActiveLead: false }));
+    }
+  });
+
   ws.on('close', () => clients.delete(ws));
   ws.on('message', async (data) => {
     try {
@@ -398,11 +407,26 @@ wss.on('connection', (ws) => {
       }
 
       if (msg.type === 'release_lock') {
-        // Client explicitly releasing a stuck lock
         const { repName } = msg;
         if (repName) {
           delete repActiveLeads[repName];
           console.log(`Lock released for ${repName}`);
+        }
+      }
+
+      if (msg.type === 'rep_init') {
+        // Client asking server for their true state on connect
+        const { repName } = msg;
+        if (repName) {
+          const activeLeadId = repActiveLeads[repName] || null;
+          const cooldownMs = repCooldowns[repName] ? Math.max(0, COOLDOWN_MS - (Date.now() - repCooldowns[repName])) : 0;
+          ws.send(JSON.stringify({
+            type: 'server_state',
+            hasActiveLead: !!activeLeadId,
+            activeLeadId,
+            cooldownSecsLeft: Math.ceil(cooldownMs / 1000)
+          }));
+          console.log(`State sync for ${repName}: active=${activeLeadId}, cooldown=${Math.ceil(cooldownMs/1000)}s`);
         }
       }
 
@@ -940,6 +964,84 @@ function broadcastAll(data) {
     if (client.readyState === WebSocket.OPEN) client.send(payload);
   }
 }
+
+// ── 2-HOUR LEAD TIMEOUT ──────────────────────────────────────
+const LEAD_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
+const LEAD_WARNING_MS = 90 * 60 * 1000;      // 90 minutes — warn rep
+
+async function checkLeadTimeouts() {
+  try {
+    // Find all claimed but undisposed leads older than 90 minutes
+    const result = await pool.query(`
+      SELECT e.lead_id, e.rep_name, e.created_at as claimed_at,
+        l.first_name, l.last_name
+      FROM lead_events e
+      JOIN leads l ON e.lead_id = l.id
+      WHERE e.event_type = 'claimed'
+      AND e.created_at < NOW() - INTERVAL '90 minutes'
+      AND NOT EXISTS (
+        SELECT 1 FROM lead_events d
+        WHERE d.lead_id = e.lead_id AND d.event_type = 'disposed'
+      )
+    `);
+
+    for (const row of result.rows) {
+      const claimedAt = new Date(row.claimed_at).getTime();
+      const age = Date.now() - claimedAt;
+      const leadId = row.lead_id;
+      const repName = row.rep_name;
+
+      if (age >= LEAD_TIMEOUT_MS) {
+        // 2+ hours — release lead back to queue
+        console.log(`Lead ${leadId} timed out for ${repName} — returning to queue`);
+        if (repActiveLeads[repName] === leadId) delete repActiveLeads[repName];
+        delete claimedLeads[leadId];
+        // Get full lead data
+        const leadResult = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+        if (leadResult.rows.length > 0) {
+          const r = leadResult.rows[0];
+          const lead = {
+            id: r.id, leadType: r.lead_type, timezone: r.timezone,
+            withinCallingHours: r.within_calling_hours,
+            firstName: r.first_name, lastName: r.last_name,
+            phone: r.phone, email: r.email, companyName: r.company_name,
+            state: r.state, qualifyAmount: r.qualify_amount,
+            timeline: r.timeline, timeInBusiness: r.time_in_business,
+            monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
+            conductsBusiness: r.conducts_business,
+          };
+          await addToWaitingQueue(leadId, lead);
+          await pool.query(
+            'INSERT INTO lead_events (lead_id, event_type, rep_name, notes) VALUES ($1, $2, $3, $4)',
+            [leadId, 'timeout', repName, 'Returned to queue after 2 hour timeout']
+          );
+          // Notify rep their lead was released
+          broadcastAll({
+            type: 'lead_timeout',
+            leadId,
+            repName,
+            message: `${row.first_name} ${row.last_name} was returned to the queue after 2 hours`
+          });
+        }
+      } else if (age >= LEAD_WARNING_MS) {
+        // 90+ minutes — warn the rep
+        const minsLeft = Math.ceil((LEAD_TIMEOUT_MS - age) / 60000);
+        broadcastAll({
+          type: 'lead_timeout_warning',
+          leadId,
+          repName,
+          minutesLeft: minsLeft,
+          message: `⚠️ Your lead ${row.first_name} ${row.last_name} will return to the queue in ${minsLeft} minutes if not disposed`
+        });
+      }
+    }
+  } catch(err) {
+    console.error('Timeout check error:', err);
+  }
+}
+
+// Run timeout check every 5 minutes
+setInterval(checkLeadTimeouts, 5 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 initDB().then(() => {
