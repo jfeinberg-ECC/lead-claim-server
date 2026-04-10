@@ -644,8 +644,29 @@
       if (msg.type === 'waiting_queue_init') {
         msg.queue.forEach(row => {
           const lead = row.lead_data;
-          if (lead && !waitingQueue[lead.id]) {
-            waitingQueue[lead.id] = { lead, addedAt: new Date(row.added_at).getTime() };
+          const leadId = row.lead_id || (lead && lead.id);
+          if (lead && leadId && !waitingQueue[leadId]) {
+            // Normalize lead fields (DB uses snake_case, client uses camelCase)
+            const normalized = {
+              id: leadId,
+              leadType: lead.leadType || lead.lead_type,
+              timezone: lead.timezone,
+              withinCallingHours: lead.withinCallingHours || lead.within_calling_hours,
+              firstName: lead.firstName || lead.first_name,
+              lastName: lead.lastName || lead.last_name,
+              phone: lead.phone,
+              email: lead.email,
+              companyName: lead.companyName || lead.company_name,
+              state: lead.state,
+              qualifyAmount: lead.qualifyAmount || lead.qualify_amount,
+              timeline: lead.timeline,
+              timeInBusiness: lead.timeInBusiness || lead.time_in_business,
+              monthlyRevenue: lead.monthlyRevenue || lead.monthly_revenue,
+              fundsUsedFor: lead.fundsUsedFor || lead.funds_used_for,
+              conductsBusiness: lead.conductsBusiness || lead.conducts_business,
+              campaignName: lead.campaignName || lead.campaign_name,
+            };
+            waitingQueue[leadId] = { lead: normalized, addedAt: new Date(row.added_at).getTime() };
           }
         });
         renderWaitingQueue(); updateStats();
