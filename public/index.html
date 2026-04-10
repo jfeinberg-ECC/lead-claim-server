@@ -621,6 +621,10 @@
         if (onCooldown || hasActiveLead) {
           addToWaiting(msg.lead);
           showLeadToast(msg.lead);
+        } else if (!msg.lead.withinCallingHours) {
+          // Outside calling hours — add to queue silently, no popup needed
+          addToWaiting(msg.lead);
+          showLeadToast(msg.lead);
         } else {
           showPopup(msg.lead);
         }
@@ -711,8 +715,7 @@
       };
       updateCountdown();
       window._hoursCountdownInterval = setInterval(updateCountdown, 1000);
-      // Pass lead to queue immediately since it can't be claimed now
-      if (ws) ws.send(JSON.stringify({ type: 'pass', leadId: lead.id, lead, repName }));
+      // Lead already goes to waiting queue via new_lead handler — no need to pass
     }
     document.getElementById('p-result').textContent = '';
     const locked = hasActiveLead;
