@@ -622,6 +622,7 @@
         }
       }
       if (msg.type === 'claim_success') {
+        clearTimeout(window._claimTimeout);
         window._activeLeadData = msg.lead;
         addLeadCard(msg.lead);
         myClaimed++; hasActiveLead = true;
@@ -629,11 +630,13 @@
         updateStats(); startCooldown(60); dismissPopup(); saveState();
       }
       if (msg.type === 'claim_failed') {
+        clearTimeout(window._claimTimeout);
         showResult(false, msg.claimedBy);
         removeFromWaiting(msg.leadId);
         updateStats(); saveState();
       }
       if (msg.type === 'claim_blocked') {
+        clearTimeout(window._claimTimeout);
         const r = document.getElementById('p-result');
         const btn = document.getElementById('p-btn');
         r.className = 'popup-result failed';
@@ -709,16 +712,31 @@
   function claimLead() {
     if (!currentLeadId || !ws || hasActiveLead || onCooldown) return;
     ws.send(JSON.stringify({ type: 'claim', leadId: currentLeadId, repName }));
-    document.getElementById('p-btn').textContent = 'Claiming...';
-    document.getElementById('p-btn').disabled = true;
+    const btn = document.getElementById('p-btn');
+    btn.textContent = 'Claiming...';
+    btn.disabled = true;
     clearInterval(timerInterval);
+    // Safety timeout — reset button if no server response in 5 seconds
+    window._claimTimeout = setTimeout(() => {
+      if (btn && btn.textContent === 'Claiming...') {
+        btn.textContent = 'Claim this lead';
+        btn.disabled = false;
+        document.getElementById('p-result').textContent = '⚠️ No response — try again';
+        document.getElementById('p-result').className = 'popup-result failed';
+      }
+    }, 5000);
   }
 
   function passLead() {
     clearInterval(timerInterval);
+    clearTimeout(window._claimTimeout);
     if (currentLead && ws) {
       ws.send(JSON.stringify({ type: 'pass', leadId: currentLead.id, lead: currentLead, repName }));
     }
+    // Release any stuck active lead state
+    hasActiveLead = false;
+    window._activeLeadData = null;
+    saveState();
     dismissPopup();
   }
 
