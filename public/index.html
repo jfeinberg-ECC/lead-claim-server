@@ -105,6 +105,12 @@
     .lead-type-badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px; }
     .badge-wc { background: #E1F5EE; color: #0F6E56; }
     .badge-ef { background: #E6F1FB; color: #0C447C; }
+    .source-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 5px; background: #f0f0f0; color: #666; }
+    .source-facebook { background: #E7F0FD; color: #1877F2; }
+    .source-google { background: #FDE8E8; color: #DB4437; }
+    .source-tiktok { background: #F0E6FF; color: #6B21A8; }
+    .source-manual { background: #FFF3CD; color: #856404; }
+    .source-cold-call { background: #E8F5E9; color: #2E7D32; }
     .lead-meta { font-size: 12px; color: #aaa; }
     .lead-card-body { padding: 16px; }
     .lead-name { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
@@ -1129,6 +1135,7 @@
         <span class="lead-type-badge ${isWC?'badge-wc':'badge-ef'}">${lead.leadType}</span>
         <span class="lead-card-summary" id="summary-${lead.id}"></span>
         <span class="lead-meta">${timeStr} · ${tzLabel(lead.timezone)}</span>
+        ${lead.leadSource ? `<span class="source-badge source-${(lead.leadSource||'').toLowerCase().replace(/\s+/g,'-')}">${lead.leadSource}</span>` : ''}
         <button class="collapse-btn" id="collapse-btn-${lead.id}" title="Collapse">▼</button>
       </div>
       <div class="lead-card-body">
@@ -1143,6 +1150,11 @@
           ${field('Monthly Revenue', lead.monthlyRevenue)}
           ${field('Funds Used For', lead.fundsUsedFor)}
           ${field('Conducts Business', lead.conductsBusiness)}
+          ${lead.customFields && Object.keys(lead.customFields).length > 0 ? 
+            Object.entries(lead.customFields)
+              .filter(([k,v]) => v && String(v).trim())
+              .map(([k,v]) => field(k.replace(/_/g,' ').replace(/\b\w/g, l => l.toUpperCase()), v))
+              .join('') : ''}
         </div>
         <div class="notes-label">Notes</div>
         <textarea class="notes-input" id="notes-${lead.id}" placeholder="Add call notes here..."></textarea>
@@ -1318,6 +1330,8 @@
           timeline: l.timeline, timeInBusiness: l.time_in_business,
           monthlyRevenue: l.monthly_revenue, fundsUsedFor: l.funds_used_for,
           conductsBusiness: l.conducts_business,
+          leadSource: l.lead_source || 'Facebook',
+          customFields: l.custom_fields || {},
         };
 
         // Add card with claimed time
