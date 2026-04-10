@@ -411,12 +411,19 @@
       repName = decodeURIComponent(switchName);
       localStorage.setItem(LS_TOKEN, repToken);
       localStorage.setItem(LS_REPNAME, repName);
-      // Always clear active lead state on fresh switch
       localStorage.removeItem(LS_ACTIVE);
       localStorage.removeItem('vl_cooldownUntil');
       window.history.replaceState({}, '', '/');
-      const data = { name: repName, email: '', profilePic: null };
-      showDashboard(data);
+      // Fetch full rep profile including pic before showing dashboard
+      try {
+        const res = await fetch(SERVER_URL + '/rep/me', { headers: { 'x-rep-token': repToken } });
+        const data = res.ok ? await res.json() : { name: repName, email: '', profilePic: null };
+        repName = data.name || repName;
+        localStorage.setItem(LS_REPNAME, repName);
+        showDashboard(data);
+      } catch(e) {
+        showDashboard({ name: repName, email: '', profilePic: null });
+      }
       if (adminMode) {
         const bar = document.getElementById('admin-mode-bar');
         document.getElementById('admin-mode-name').textContent = repName;
