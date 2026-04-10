@@ -450,17 +450,62 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'rep_init') {
         // Client asking server for their true state on connect
-        const { repName } = msg;
+        // Check DB for undisposed leads in last 2 hours — don't trust memory alone
+        const { repName, repToken: msgRepToken } = msg;
         if (repName) {
-          const activeLeadId = repActiveLeads[repName] || null;
-          const cooldownMs = repCooldowns[repName] ? Math.max(0, COOLDOWN_MS - (Date.now() - repCooldowns[repName])) : 0;
+          let verifiedName = repName;
+          // Verify token to get consistent name
+          if (msgRepToken) {
+            try {
+              const tr = await pool.query(
+                'SELECT r.name, r.first_name, r.last_name FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW()',
+                [msgRepToken]
+              );
+              if (tr.rows.length > 0) {
+                verifiedName = tr.rows[0].name;
+                // Restore memory state from DB if server restarted
+                const activeResult = await pool.query(`
+                  SELECT e.lead_id FROM lead_events e
+                  WHERE e.event_type = 'claimed'
+                  AND e.rep_name = $1
+                  AND e.created_at > NOW() - INTERVAL '2 hours'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM lead_events d
+                    WHERE d.lead_id = e.lead_id AND d.event_type IN ('disposed', 'timeout')
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = e.lead_id
+                  )
+                  ORDER BY e.created_at DESC LIMIT 1
+                `, [verifiedName]);
+                
+                if (activeResult.rows.length > 0) {
+                  const activeLeadId = activeResult.rows[0].lead_id;
+                  // Restore memory state
+                  repActiveLeads[verifiedName] = activeLeadId;
+                  const cooldownMs = repCooldowns[verifiedName] ? Math.max(0, COOLDOWN_MS - (Date.now() - repCooldowns[verifiedName])) : 0;
+                  ws.send(JSON.stringify({
+                    type: 'server_state',
+                    hasActiveLead: true,
+                    activeLeadId,
+                    cooldownSecsLeft: Math.ceil(cooldownMs / 1000)
+                  }));
+                  console.log(`State restored from DB for ${verifiedName}: active=${activeLeadId}`);
+                  return;
+                }
+              }
+            } catch(e) { console.error('rep_init error:', e); }
+          }
+          
+          const activeLeadId = repActiveLeads[verifiedName] || null;
+          const cooldownMs = repCooldowns[verifiedName] ? Math.max(0, COOLDOWN_MS - (Date.now() - repCooldowns[verifiedName])) : 0;
           ws.send(JSON.stringify({
             type: 'server_state',
             hasActiveLead: !!activeLeadId,
             activeLeadId,
             cooldownSecsLeft: Math.ceil(cooldownMs / 1000)
           }));
-          console.log(`State sync for ${repName}: active=${activeLeadId}, cooldown=${Math.ceil(cooldownMs/1000)}s`);
+          console.log(`State sync for ${verifiedName}: active=${activeLeadId}, cooldown=${Math.ceil(cooldownMs/1000)}s`);
         }
       }
 
