@@ -74,6 +74,7 @@ async function initDB() {
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       is_super_admin BOOLEAN DEFAULT FALSE,
+      linked_rep_id INTEGER,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
@@ -126,6 +127,7 @@ async function initDB() {
   // Add columns if they don't exist (safe migration)
   await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS first_name TEXT").catch(()=>{});
   await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS last_name TEXT").catch(()=>{});
+  await pool.query("ALTER TABLE admins ADD COLUMN IF NOT EXISTS linked_rep_id INTEGER").catch(()=>{});
   console.log('Database initialized');
 }
 
@@ -927,29 +929,46 @@ app.get('/rep/recent-leads', requireRep, async (req, res) => {
   res.json(result.rows);
 });
 
+// Get admin's linked rep
+app.get('/admin/linked-rep', requireAdmin, async (req, res) => {
+  const result = await pool.query(
+    'SELECT a.linked_rep_id, r.name, r.id FROM admins a LEFT JOIN reps r ON a.linked_rep_id = r.id WHERE a.id = $1',
+    [req.admin.id]
+  );
+  const row = result.rows[0];
+  res.json({ linkedRepId: row?.linked_rep_id, linkedRepName: row?.name });
+});
+
+// Set admin's linked rep
+app.post('/admin/link-rep', requireAdmin, async (req, res) => {
+  const { repId } = req.body;
+  await pool.query('UPDATE admins SET linked_rep_id = $1 WHERE id = $2', [repId || null, req.admin.id]);
+  res.json({ success: true });
+});
+
 // ── ADMIN SWITCH TO REP ──────────────────────────────────────
 app.post('/admin/switch-to-rep', requireAdmin, async (req, res) => {
   const admin = req.admin;
   let repId;
   let repName = admin.username;
 
-  // First check if there's a rep account with matching email or name
-  let repResult = await pool.query(
-    'SELECT * FROM reps WHERE email = $1 OR name ILIKE $2 LIMIT 1',
-    [admin.username + '@admin.voltlead', admin.username]
-  );
+  // Use linked rep account if set
+  const adminData = await pool.query('SELECT linked_rep_id FROM admins WHERE id = $1', [req.admin.id]);
+  const linkedRepId = adminData.rows[0]?.linked_rep_id;
 
-  if (repResult.rows.length === 0) {
-    // Create a linked rep account
-    const insertResult = await pool.query(
-      'INSERT INTO reps (name, email, password_hash, active) VALUES ($1, $2, $3, TRUE) RETURNING id',
-      [admin.username, admin.username + '@admin.voltlead', 'admin-linked-account']
-    );
-    repId = insertResult.rows[0].id;
-  } else {
-    repId = repResult.rows[0].id;
-    repName = repResult.rows[0].name;
-    await pool.query('UPDATE reps SET active = TRUE WHERE id = $1', [repId]);
+  if (linkedRepId) {
+    // Use the admin's linked rep account
+    const repResult = await pool.query('SELECT * FROM reps WHERE id = $1', [linkedRepId]);
+    if (repResult.rows.length > 0) {
+      repId = repResult.rows[0].id;
+      repName = repResult.rows[0].name;
+      await pool.query('UPDATE reps SET active = TRUE WHERE id = $1', [repId]);
+    }
+  }
+
+  if (!repId) {
+    // No linked rep — return error asking admin to link one
+    return res.status(400).json({ error: 'No rep account linked. Go to Change Password page to link your rep account.' });
   }
   // Create a short-lived one-time token (5 minutes)
   const token = generateToken();
