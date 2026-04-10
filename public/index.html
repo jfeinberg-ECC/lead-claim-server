@@ -631,18 +631,50 @@
   // ── NOTIFICATIONS ─────────────────────────────────────────
   function checkNotifPermission() {
     if (!('Notification' in window)) return;
-    if (Notification.permission === 'default') document.getElementById('notif-bar').style.display = 'flex';
+    if (Notification.permission === 'default') {
+      document.getElementById('notif-bar').style.display = 'flex';
+    } else if (Notification.permission === 'granted') {
+      document.getElementById('notif-bar').style.display = 'none';
+    } else {
+      // Denied — hide bar, nothing we can do
+      document.getElementById('notif-bar').style.display = 'none';
+    }
   }
   function requestNotifPermission() {
-    Notification.requestPermission().then(() => document.getElementById('notif-bar').style.display = 'none');
+    if (!('Notification' in window)) {
+      document.getElementById('notif-bar').style.display = 'none';
+      return;
+    }
+    // Must be called directly from user gesture for Edge compatibility
+    const req = Notification.requestPermission();
+    if (req && req.then) {
+      req.then(permission => {
+        document.getElementById('notif-bar').style.display = 'none';
+        if (permission === 'granted') {
+          // Test notification so user knows it worked
+          new Notification('⚡ Voltlead', { body: 'Notifications enabled! You'll be alerted for new leads.', tag: 'notif-test' });
+        }
+      }).catch(() => {
+        document.getElementById('notif-bar').style.display = 'none';
+      });
+    } else {
+      // Old callback style
+      document.getElementById('notif-bar').style.display = 'none';
+    }
   }
   function sendNotification(lead) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    const n = new Notification('⚡ New Lead — ' + lead.leadType, {
-      body: `${tzLabel(lead.timezone)} timezone · Click to claim`,
-      requireInteraction: true, tag: 'lead-' + lead.id
-    });
-    n.onclick = () => { window.focus(); n.close(); };
+    try {
+      const n = new Notification('⚡ New Lead — ' + lead.leadType, {
+        body: tzLabel(lead.timezone) + ' timezone · Click to claim',
+        requireInteraction: true,
+        tag: 'lead-' + lead.id,
+        icon: '/favicon.ico'
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch(e) {
+      console.warn('Notification error:', e);
+    }
   }
 
   // ── CLOCKS ────────────────────────────────────────────────
