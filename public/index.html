@@ -19,6 +19,7 @@
     .login-sub { font-size: 13px; color: #888; margin-bottom: 1.8rem; }
     .login-card input { width: 100%; padding: 11px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-bottom: 10px; outline: none; }
     .login-card input:focus { border-color: #1D9E75; }
+    .login-card input[type=password] { margin-bottom: 0; }
     .login-card button { width: 100%; padding: 12px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
     .login-card button:hover { background: #0F6E56; }
     .login-error { color: #c0392b; font-size: 13px; margin-top: 8px; }
@@ -243,7 +244,10 @@
     <div class="login-logo">⚡ Volt<span>lead</span></div>
     <div class="login-sub">Sign in to your account</div>
     <input type="email" id="login-email" placeholder="Email address" autocomplete="email" />
-    <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
+    <div style="position:relative;margin-bottom:10px">
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" style="width:100%;padding:11px 40px 11px 14px;border:1px solid #ddd;border-radius:8px;font-size:15px;outline:none;" />
+      <span onclick="togglePassword()" id="pw-toggle" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;user-select:none;color:#888">👁</span>
+    </div>
     <button onclick="doLogin()">Sign In</button>
     <div class="login-error" id="login-error"></div>
   </div>
@@ -293,7 +297,10 @@
 <div id="dashboard">
   <div class="top-bar">
     <div class="top-bar-logo">⚡ Volt<span>lead</span></div>
-    <div class="conn-status"><div class="dot" id="conn-dot"></div><span id="conn-label">Connecting...</span></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="conn-status"><div class="dot" id="conn-dot"></div><span id="conn-label">Connecting...</span></div>
+      <button onclick="logout()" style="padding:6px 14px;background:none;border:1px solid #ddd;border-radius:7px;font-size:12px;color:#888;cursor:pointer;white-space:nowrap;" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='none'">Sign Out</button>
+    </div>
   </div>
 
   <div id="admin-mode-bar" style="display:none;background:#1a1a2e;color:#1D9E75;padding:10px 16px;border-radius:10px;margin-bottom:1.2rem;display:none;align-items:center;justify-content:space-between;font-size:13px;font-weight:600;">
@@ -390,6 +397,18 @@
   let pendingPicData = null;
 
   // ── AUTH ──────────────────────────────────────────────────
+  function togglePassword() {
+    const input = document.getElementById('login-password');
+    const toggle = document.getElementById('pw-toggle');
+    if (input.type === 'password') {
+      input.type = 'text';
+      toggle.textContent = '🙈';
+    } else {
+      input.type = 'password';
+      toggle.textContent = '👁';
+    }
+  }
+
   async function doLogin() {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
