@@ -369,11 +369,29 @@ wss.on('connection', (ws) => {
 
 async function addToWaitingQueue(leadId, lead) {
   try {
+    // Get full lead from DB if we only have partial data
+    let fullLead = lead;
+    if (!lead.firstName && !lead.first_name) {
+      const result = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+      if (result.rows.length > 0) {
+        const r = result.rows[0];
+        fullLead = {
+          id: r.id, leadType: r.lead_type, timezone: r.timezone,
+          withinCallingHours: r.within_calling_hours,
+          firstName: r.first_name, lastName: r.last_name,
+          phone: r.phone, email: r.email, companyName: r.company_name,
+          state: r.state, qualifyAmount: r.qualify_amount,
+          timeline: r.timeline, timeInBusiness: r.time_in_business,
+          monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
+          conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
+        };
+      }
+    }
     await pool.query(
       'INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO NOTHING',
-      [leadId, JSON.stringify(lead)]
+      [leadId, JSON.stringify(fullLead)]
     );
-    broadcastAll({ type: 'lead_waiting', leadId, lead, addedAt: new Date().toISOString() });
+    broadcastAll({ type: 'lead_waiting', leadId, lead: fullLead, addedAt: new Date().toISOString() });
   } catch (err) {
     console.error('Waiting queue error:', err);
   }
