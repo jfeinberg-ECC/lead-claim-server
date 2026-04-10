@@ -819,7 +819,7 @@ app.post('/admin/switch-to-rep', requireAdmin, async (req, res) => {
   // Create a short-lived one-time token (5 minutes)
   const token = generateToken();
   await pool.query(
-    'INSERT INTO rep_sessions (token, rep_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')',
+    "INSERT INTO rep_sessions (token, rep_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')",
     [token, repId]
   );
   res.json({ token, repName: admin.username });
