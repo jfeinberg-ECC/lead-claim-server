@@ -200,6 +200,16 @@
     </div>
     <hr style="border:none;border-top:1px solid #f0f0f0;margin:1rem 0" />
     <div class="modal-section">
+      <label>Display Name</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <input type="text" id="profile-firstname" placeholder="First name" />
+        <input type="text" id="profile-lastname" placeholder="Last name" />
+      </div>
+      <button class="modal-btn" onclick="saveName()">Save Name</button>
+      <div class="modal-msg" id="name-msg"></div>
+    </div>
+    <hr style="border:none;border-top:1px solid #f0f0f0;margin:1rem 0" />
+    <div class="modal-section">
       <label>Change Password</label>
       <input type="password" id="cur-pw" placeholder="Current password" style="margin-bottom:8px" />
       <input type="password" id="new-pw" placeholder="New password (min 6 chars)" style="margin-bottom:8px" />
@@ -347,6 +357,10 @@
   function showDashboard(repData) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
+    // Use first+last if available, fallback to name
+    if (repData.firstName && repData.lastName) {
+      repName = repData.firstName + ' ' + repData.lastName;
+    }
     document.getElementById('user-name-display').textContent = repName;
     document.getElementById('shift-time').textContent = 'Shift started ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     setAvatar(repData.profilePic, repName);
@@ -415,6 +429,10 @@
   // ── ACCOUNT MODAL ─────────────────────────────────────────
   function openAccount() {
     document.getElementById('account-modal').classList.add('active');
+    // Pre-fill name fields from current rep data
+    const parts = repName.split(' ');
+    document.getElementById('profile-firstname').value = parts[0] || '';
+    document.getElementById('profile-lastname').value = parts.slice(1).join(' ') || '';
   }
   function closeAccount() {
     document.getElementById('account-modal').classList.remove('active');
@@ -423,6 +441,7 @@
     document.getElementById('cur-pw').value = '';
     document.getElementById('new-pw').value = '';
     document.getElementById('confirm-pw').value = '';
+    document.getElementById('name-msg').textContent = '';
   }
 
   function handlePicUpload(event) {
@@ -456,6 +475,30 @@
         msg.className = 'modal-msg error'; msg.textContent = data.error;
       }
     } catch(e) { msg.className = 'modal-msg error'; msg.textContent = 'Error saving photo'; }
+  }
+
+  async function saveName() {
+    const firstName = document.getElementById('profile-firstname').value.trim();
+    const lastName = document.getElementById('profile-lastname').value.trim();
+    const msg = document.getElementById('name-msg');
+    if (!firstName || !lastName) { msg.className = 'modal-msg error'; msg.textContent = 'Both first and last name are required'; return; }
+    try {
+      const res = await fetch(SERVER_URL + '/rep/update-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-rep-token': repToken },
+        body: JSON.stringify({ firstName, lastName })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        repName = data.name;
+        localStorage.setItem(LS_REPNAME, repName);
+        document.getElementById('user-name-display').textContent = repName;
+        setAvatar(null, repName);
+        msg.className = 'modal-msg success'; msg.textContent = '✅ Name updated!';
+      } else {
+        msg.className = 'modal-msg error'; msg.textContent = data.error;
+      }
+    } catch(e) { msg.className = 'modal-msg error'; msg.textContent = 'Error updating name'; }
   }
 
   async function savePassword() {
