@@ -315,10 +315,40 @@ wss.on('connection', (ws) => {
         } else if (now - lastClaim < COOLDOWN_MS) {
           ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'cooldown', secondsLeft, leadId }));
         } else {
+          // Check calling hours — block claim if outside hours
+          const leadInfo = leadData[leadId];
+          if (leadInfo && leadInfo.withinCallingHours === false) {
+            // Re-check calling hours in real time
+            const stillOutside = !isWithinCallingHours(leadInfo.phone || '');
+            if (stillOutside) {
+              ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'outside_hours', leadId }));
+              return;
+            }
+          }
           claimedLeads[leadId] = repName;
           repCooldowns[repName] = now;
           repActiveLeads[repName] = leadId;
-          const lead = leadData[leadId];
+          // Get lead from memory or fetch from DB if not in memory
+          let lead = leadData[leadId];
+          if (!lead) {
+            try {
+              const result = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+              if (result.rows.length > 0) {
+                const r = result.rows[0];
+                lead = {
+                  id: r.id, leadType: r.lead_type, timezone: r.timezone,
+                  withinCallingHours: r.within_calling_hours,
+                  firstName: r.first_name, lastName: r.last_name,
+                  phone: r.phone, email: r.email, companyName: r.company_name,
+                  state: r.state, qualifyAmount: r.qualify_amount,
+                  timeline: r.timeline, timeInBusiness: r.time_in_business,
+                  monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
+                  conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
+                };
+                leadData[leadId] = lead; // Cache it
+              }
+            } catch(e) { console.error('Lead fetch error:', e); }
+          }
           ws.send(JSON.stringify({ type: 'claim_success', leadId, lead }));
           broadcastAll({ type: 'lead_claimed', leadId, claimedBy: repName });
           await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [leadId]);
