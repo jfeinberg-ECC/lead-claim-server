@@ -125,6 +125,7 @@
     <div class="nav-item" onclick="showPage('reps', this)">👤 Manage Reps</div>
     <div class="nav-item" onclick="showPage('admins', this)" id="admins-nav" style="display:none">🔐 Manage Admins</div>
     <div class="nav-item" onclick="showPage('password', this)">🔑 Change Password</div>
+    <div class="nav-item" onclick="switchToClaimer()" style="color:#F5A623;margin-top:8px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px">🎯 Switch to Claimer</div>
     <div class="sidebar-footer">
       <div class="sidebar-user"><strong id="sidebar-username">...</strong>Admin</div>
       <button class="logout-btn" onclick="logout()">Sign Out</button>
@@ -607,6 +608,23 @@
     if(['imn_app_taken','imn_app_sent'].includes(d)) return 'badge-positive';
     if(['left_message','no_answer','in_market_later'].includes(d)) return 'badge-vs';
     return 'badge-negative';
+  }
+
+  // ── SWITCH TO CLAIMER ────────────────────────────────────
+  async function switchToClaimer() {
+    try {
+      const res = await fetch('/admin/switch-to-rep', {
+        method: 'POST',
+        headers: { 'x-admin-token': token, 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (!res.ok) { alert('Error: ' + data.error); return; }
+      // Open rep dashboard with auto-login token
+      const url = `/?switch_token=${data.token}&switch_name=${encodeURIComponent(data.repName)}&admin_mode=1`;
+      window.open(url, '_blank');
+    } catch(e) {
+      alert('Connection error — please try again');
+    }
   }
 
   // ── INIT ──────────────────────────────────────────────────
