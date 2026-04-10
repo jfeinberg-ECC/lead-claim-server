@@ -274,9 +274,23 @@
 
     <!-- CHANGE PASSWORD -->
     <div class="page" id="page-password">
-      <div class="page-title">Change Password</div>
-      <div class="form-card" style="max-width:400px">
-        <h3>New Password</h3>
+      <div class="page-title">My Account</div>
+
+      <div class="form-card" style="max-width:480px;margin-bottom:1.5rem">
+        <h3>🎯 My Rep Account</h3>
+        <p style="font-size:13px;color:#888;margin-bottom:14px">Link your rep account so Switch to Claimer opens your full history and leads.</p>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>Linked Rep Account</label>
+          <select id="linked-rep-select" style="width:100%;padding:9px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px">
+            <option value="">— No rep account linked —</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="saveLinkedRep()">Save Linked Rep</button>
+        <div class="form-msg" id="linked-rep-msg"></div>
+      </div>
+
+      <div class="form-card" style="max-width:480px">
+        <h3>Change Password</h3>
         <div class="form-group" style="margin-bottom:10px"><label>New Password</label><input type="password" id="new-pw" placeholder="Enter new password" /></div>
         <div class="form-group" style="margin-bottom:14px"><label>Confirm Password</label><input type="password" id="confirm-pw" placeholder="Confirm new password" /></div>
         <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
@@ -338,6 +352,7 @@
     if (name==='waiting') loadWaiting();
     if (name==='admins') loadAdmins();
     if (name==='reps') loadReps();
+    if (name==='password') loadLinkedRep();
   }
 
   // ── DASHBOARD ─────────────────────────────────────────────
@@ -613,6 +628,37 @@
     return 'badge-negative';
   }
 
+  // ── LINKED REP ───────────────────────────────────────────
+  async function loadLinkedRep() {
+    const [repsData, linkedData] = await Promise.all([
+      api('/admin/reps'),
+      api('/admin/linked-rep')
+    ]);
+    if (!repsData || !linkedData) return;
+    const select = document.getElementById('linked-rep-select');
+    select.innerHTML = '<option value="">— No rep account linked —</option>';
+    repsData.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.name + ' (' + r.email + ')';
+      if (r.id === linkedData.linkedRepId) opt.selected = true;
+      select.appendChild(opt);
+    });
+  }
+
+  async function saveLinkedRep() {
+    const repId = document.getElementById('linked-rep-select').value;
+    const msg = document.getElementById('linked-rep-msg');
+    const data = await api('/admin/link-rep', { method: 'POST', body: JSON.stringify({ repId: repId || null }) });
+    if (data?.success) {
+      msg.className = 'form-msg success';
+      msg.textContent = repId ? '✅ Rep account linked — Switch to Claimer will now use this account' : '✅ Rep account unlinked';
+    } else {
+      msg.className = 'form-msg error';
+      msg.textContent = 'Error saving';
+    }
+  }
+
   // ── SWITCH TO CLAIMER ────────────────────────────────────
   async function switchToClaimer() {
     try {
@@ -621,8 +667,17 @@
         headers: { 'x-admin-token': token, 'Content-Type': 'application/json' }
       });
       const data = await res.json();
-      if (!res.ok) { alert('Error: ' + data.error); return; }
-      // Open rep dashboard with auto-login token
+      if (!res.ok) {
+        if (data.error?.includes('No rep account linked')) {
+          if (confirm('You haven\'t linked a rep account yet. Go to My Account to set it up?')) {
+            showPage('password', document.querySelector('.nav-item:last-of-type'));
+            loadLinkedRep();
+          }
+        } else {
+          alert('Error: ' + data.error);
+        }
+        return;
+      }
       const url = `/?switch_token=${data.token}&switch_name=${encodeURIComponent(data.repName)}&admin_mode=1`;
       window.open(url, '_blank');
     } catch(e) {
