@@ -789,7 +789,41 @@ app.get('/admin/waiting', requireAdmin, async (req, res) => {
   res.json(result.rows);
 });
 
+// One-time admin password reset — remove after use
+app.get('/reset-admin-password', async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== 'voltlead-reset-2024') return res.status(403).json({ error: 'Forbidden' });
+  const hash = hashPassword('changeme123');
+  await pool.query('UPDATE admins SET password_hash = $1 WHERE username = $2', [hash, 'admin']);
+  res.json({ success: true, message: 'Admin password reset to changeme123' });
+});
 
+// ── ADMIN SWITCH TO REP ──────────────────────────────────────
+app.post('/admin/switch-to-rep', requireAdmin, async (req, res) => {
+  const admin = req.admin;
+  // Check if admin already has a linked rep account
+  let repResult = await pool.query('SELECT * FROM reps WHERE email = $1', [admin.username + '@admin.voltlead']);
+  let repId;
+  if (repResult.rows.length === 0) {
+    // Create a rep account for this admin automatically
+    const insertResult = await pool.query(
+      'INSERT INTO reps (name, email, password_hash, active) VALUES ($1, $2, $3, TRUE) RETURNING id',
+      [admin.username, admin.username + '@admin.voltlead', 'admin-linked-account']
+    );
+    repId = insertResult.rows[0].id;
+  } else {
+    repId = repResult.rows[0].id;
+    // Make sure it's active
+    await pool.query('UPDATE reps SET active = TRUE WHERE id = $1', [repId]);
+  }
+  // Create a short-lived one-time token (5 minutes)
+  const token = generateToken();
+  await pool.query(
+    'INSERT INTO rep_sessions (token, rep_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')',
+    [token, repId]
+  );
+  res.json({ token, repName: admin.username });
+});
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', connected: clients.size, leads: Object.keys(leadData).length });
