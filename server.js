@@ -548,9 +548,9 @@ wss.on('connection', (ws) => {
 
 async function addToWaitingQueue(leadId, lead) {
   try {
-    // Get full lead from DB if we only have partial data
+    // Get full lead from DB
     let fullLead = lead;
-    if (!lead.firstName && !lead.first_name) {
+    try {
       const result = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
       if (result.rows.length > 0) {
         const r = result.rows[0];
@@ -565,12 +565,17 @@ async function addToWaitingQueue(leadId, lead) {
           conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
         };
       }
-    }
-    await pool.query(
-      'INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO NOTHING',
+    } catch(e) {}
+
+    const inserted = await pool.query(
+      'INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO NOTHING RETURNING lead_id',
       [leadId, JSON.stringify(fullLead)]
     );
-    broadcastAll({ type: 'lead_waiting', leadId, lead: fullLead, addedAt: new Date().toISOString() });
+
+    if (inserted.rows.length > 0) {
+      // Only broadcast lead_waiting (queue update) NOT new_lead (which triggers popup)
+      broadcastAll({ type: 'lead_waiting', leadId, lead: fullLead, addedAt: new Date().toISOString() });
+    }
   } catch (err) {
     console.error('Waiting queue error:', err);
   }
@@ -1235,7 +1240,7 @@ async function recoverOrphanedLeads() {
     }
     if (result.rows.length > 0) {
       console.log(`Recovered ${result.rows.length} orphaned leads to queue`);
-      // Broadcast updated queue to all clients
+      // Broadcast full queue refresh to all clients (not new_lead which triggers popup)
       const queueResult = await pool.query('SELECT lead_id, lead_data, added_at FROM waiting_queue ORDER BY added_at ASC');
       broadcastAll({ type: 'waiting_queue_init', queue: queueResult.rows });
     }
