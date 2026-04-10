@@ -308,7 +308,13 @@ wss.on('connection', (ws) => {
   pool.query('SELECT lead_id, lead_data, added_at FROM waiting_queue ORDER BY added_at ASC')
     .then(result => {
       if (result.rows.length > 0) {
-        ws.send(JSON.stringify({ type: 'waiting_queue_init', queue: result.rows }));
+        // Send full lead data so client can claim properly after refresh
+        const queue = result.rows.map(row => ({
+          lead_id: row.lead_id,
+          lead_data: row.lead_data, // Already full data stored in DB
+          added_at: row.added_at
+        }));
+        ws.send(JSON.stringify({ type: 'waiting_queue_init', queue }));
       }
     }).catch(err => console.error('Queue fetch error:', err));
 
