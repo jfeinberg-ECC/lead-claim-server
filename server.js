@@ -9,7 +9,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── DATABASE ─────────────────────────────────────────────────
@@ -45,7 +45,7 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS lead_events (
       id SERIAL PRIMARY KEY,
       lead_id TEXT,
-      event_type TEXT,  -- 'claimed', 'disposed', 'passed', 'expired'
+      event_type TEXT,
       rep_name TEXT,
       disposition TEXT,
       notes TEXT,
@@ -68,16 +68,42 @@ async function initDB() {
 
     CREATE TABLE IF NOT EXISTS admin_sessions (
       token TEXT PRIMARY KEY,
-      admin_id INTEGER REFERENCES admins(id),
+      admin_id INTEGER REFERENCES admins(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '24 hours'
     );
+
+    CREATE TABLE IF NOT EXISTS reps (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      profile_pic TEXT,
+      active BOOLEAN DEFAULT TRUE,
+      invited_at TIMESTAMPTZ DEFAULT NOW(),
+      last_login TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS rep_sessions (
+      token TEXT PRIMARY KEY,
+      rep_id INTEGER REFERENCES reps(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days'
+    );
+
+    CREATE TABLE IF NOT EXISTS rep_invites (
+      token TEXT PRIMARY KEY,
+      rep_id INTEGER REFERENCES reps(id) ON DELETE CASCADE,
+      used BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days'
+    );
   `);
 
-  // Create default super admin if none exists (user: admin, pass: changeme123)
+  // Default super admin
   const existing = await pool.query('SELECT id FROM admins WHERE is_super_admin = TRUE LIMIT 1');
   if (existing.rows.length === 0) {
-    const hash = crypto.createHash('sha256').update('changeme123').digest('hex');
+    const hash = hashPassword('changeme123');
     await pool.query(
       'INSERT INTO admins (username, password_hash, is_super_admin) VALUES ($1, $2, TRUE) ON CONFLICT DO NOTHING',
       ['admin', hash]
@@ -91,9 +117,40 @@ async function initDB() {
 const claimedLeads = {};
 const leadData = {};
 const clients = new Set();
-const repCooldowns = {};    // { repName: timestamp of last claim }
-const repActiveLeads = {};  // { repName: leadId }
+const repCooldowns = {};
+const repActiveLeads = {};
 const COOLDOWN_MS = 60000;
+
+// ── HELPERS ──────────────────────────────────────────────────
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password + 'voltlead_salt').digest('hex');
+}
+
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+async function sendEmail(to, subject, html) {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@voltlead.io';
+  if (!apiKey) { console.warn('No SendGrid API key'); return; }
+  try {
+    const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: fromEmail, name: 'Voltlead' },
+        subject,
+        content: [{ type: 'text/html', value: html }]
+      })
+    });
+    if (res.ok) console.log(`Email sent to ${to}`);
+    else console.error(`SendGrid error: ${res.status}`, await res.text());
+  } catch (err) {
+    console.error('Email error:', err);
+  }
+}
 
 // ── TIMEZONE HELPERS ─────────────────────────────────────────
 const areaCodeTimezones = {
@@ -189,12 +246,44 @@ function isWithinCallingHours(phone) {
   return (h * 60 + m) >= 480 && (h * 60 + m) < 1020;
 }
 
+// ── REP AUTH MIDDLEWARE ──────────────────────────────────────
+async function requireRep(req, res, next) {
+  const token = req.headers['x-rep-token'];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await pool.query(
+    'SELECT r.* FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW() AND r.active = TRUE',
+    [token]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Session expired' });
+  req.rep = result.rows[0];
+  next();
+}
+
+// ── ADMIN AUTH MIDDLEWARE ────────────────────────────────────
+async function requireAdmin(req, res, next) {
+  const token = req.headers['x-admin-token'];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await pool.query(
+    'SELECT a.* FROM admin_sessions s JOIN admins a ON s.admin_id = a.id WHERE s.token = $1 AND s.expires_at > NOW()',
+    [token]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Session expired' });
+  req.admin = result.rows[0];
+  next();
+}
+
+async function requireSuperAdmin(req, res, next) {
+  await requireAdmin(req, res, () => {
+    if (!req.admin.is_super_admin) return res.status(403).json({ error: 'Super admin required' });
+    next();
+  });
+}
+
 // ── WEBSOCKET ────────────────────────────────────────────────
 wss.on('connection', (ws) => {
   clients.add(ws);
   console.log(`Connected. Total: ${clients.size}`);
 
-  // Send current waiting queue to new connection
   pool.query('SELECT lead_id, lead_data, added_at FROM waiting_queue ORDER BY added_at ASC')
     .then(result => {
       if (result.rows.length > 0) {
@@ -227,9 +316,7 @@ wss.on('connection', (ws) => {
           const lead = leadData[leadId];
           ws.send(JSON.stringify({ type: 'claim_success', leadId, lead }));
           broadcastAll({ type: 'lead_claimed', leadId, claimedBy: repName });
-          // remove from waiting queue
           await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [leadId]);
-          // log event
           await pool.query(
             'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
             [leadId, 'claimed', repName]
@@ -287,7 +374,6 @@ async function addToWaitingQueue(leadId, lead) {
   }
 }
 
-// ── DISPOSITION ROUTING ──────────────────────────────────────
 async function handleDisposition({ lead, disposition, notes, repName }) {
   const payload = { ...lead, notes, disposition, repName, disposedAt: new Date().toISOString() };
   if (['imn_app_taken', 'imn_app_sent'].includes(disposition)) {
@@ -309,6 +395,74 @@ async function sendToZapier(webhookUrl, payload) {
     console.error('Zapier error:', err);
   }
 }
+
+// ── REP AUTH ROUTES ──────────────────────────────────────────
+app.post('/rep/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  const hash = hashPassword(password);
+  const result = await pool.query(
+    'SELECT * FROM reps WHERE email = $1 AND password_hash = $2 AND active = TRUE',
+    [email.toLowerCase(), hash]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
+  const rep = result.rows[0];
+  const token = generateToken();
+  await pool.query('INSERT INTO rep_sessions (token, rep_id) VALUES ($1, $2)', [token, rep.id]);
+  await pool.query('UPDATE reps SET last_login = NOW() WHERE id = $1', [rep.id]);
+  res.json({ token, name: rep.name, email: rep.email, profilePic: rep.profile_pic });
+});
+
+app.post('/rep/logout', requireRep, async (req, res) => {
+  const token = req.headers['x-rep-token'];
+  await pool.query('DELETE FROM rep_sessions WHERE token = $1', [token]);
+  res.json({ success: true });
+});
+
+app.get('/rep/me', requireRep, async (req, res) => {
+  res.json({ name: req.rep.name, email: req.rep.email, profilePic: req.rep.profile_pic });
+});
+
+app.post('/rep/change-password', requireRep, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both passwords required' });
+  const hash = hashPassword(currentPassword);
+  const result = await pool.query('SELECT id FROM reps WHERE id = $1 AND password_hash = $2', [req.rep.id, hash]);
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Current password is incorrect' });
+  await pool.query('UPDATE reps SET password_hash = $1 WHERE id = $2', [hashPassword(newPassword), req.rep.id]);
+  res.json({ success: true });
+});
+
+app.post('/rep/profile-pic', requireRep, async (req, res) => {
+  const { imageData } = req.body;
+  if (!imageData) return res.status(400).json({ error: 'No image data provided' });
+  await pool.query('UPDATE reps SET profile_pic = $1 WHERE id = $2', [imageData, req.rep.id]);
+  res.json({ success: true, profilePic: imageData });
+});
+
+// Invite acceptance — set password from invite link
+app.get('/rep/invite/:token', async (req, res) => {
+  const result = await pool.query(
+    'SELECT i.*, r.name, r.email FROM rep_invites i JOIN reps r ON i.rep_id = r.id WHERE i.token = $1 AND i.used = FALSE AND i.expires_at > NOW()',
+    [req.params.token]
+  );
+  if (result.rows.length === 0) return res.status(404).json({ error: 'Invalid or expired invite link' });
+  res.json({ valid: true, name: result.rows[0].name, email: result.rows[0].email });
+});
+
+app.post('/rep/invite/:token/accept', async (req, res) => {
+  const { password } = req.body;
+  if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const result = await pool.query(
+    'SELECT i.*, r.id as rep_id FROM rep_invites i JOIN reps r ON i.rep_id = r.id WHERE i.token = $1 AND i.used = FALSE AND i.expires_at > NOW()',
+    [req.params.token]
+  );
+  if (result.rows.length === 0) return res.status(404).json({ error: 'Invalid or expired invite link' });
+  const invite = result.rows[0];
+  await pool.query('UPDATE reps SET password_hash = $1 WHERE id = $2', [hashPassword(password), invite.rep_id]);
+  await pool.query('UPDATE rep_invites SET used = TRUE WHERE token = $1', [req.params.token]);
+  res.json({ success: true });
+});
 
 // ── LEAD WEBHOOK ─────────────────────────────────────────────
 app.post('/webhook/lead', async (req, res) => {
@@ -341,7 +495,6 @@ app.post('/webhook/lead', async (req, res) => {
 
   leadData[lead.id] = lead;
 
-  // Save to DB
   try {
     await pool.query(`
       INSERT INTO leads (id, lead_type, first_name, last_name, phone, email, company_name, state,
@@ -362,30 +515,6 @@ app.post('/webhook/lead', async (req, res) => {
 });
 
 // ── ADMIN AUTH ───────────────────────────────────────────────
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
-
-async function requireAdmin(req, res, next) {
-  const token = req.headers['x-admin-token'];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  const result = await pool.query(
-    'SELECT a.* FROM admin_sessions s JOIN admins a ON s.admin_id = a.id WHERE s.token = $1 AND s.expires_at > NOW()',
-    [token]
-  );
-  if (result.rows.length === 0) return res.status(401).json({ error: 'Session expired' });
-  req.admin = result.rows[0];
-  next();
-}
-
-async function requireSuperAdmin(req, res, next) {
-  await requireAdmin(req, res, () => {
-    if (!req.admin.is_super_admin) return res.status(403).json({ error: 'Super admin required' });
-    next();
-  });
-}
-
-// Admin login
 app.post('/admin/login', async (req, res) => {
   const { username, password } = req.body;
   const hash = hashPassword(password);
@@ -395,29 +524,23 @@ app.post('/admin/login', async (req, res) => {
   );
   if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
   const admin = result.rows[0];
-  const token = crypto.randomBytes(32).toString('hex');
-  await pool.query(
-    'INSERT INTO admin_sessions (token, admin_id) VALUES ($1, $2)',
-    [token, admin.id]
-  );
+  const token = generateToken();
+  await pool.query('INSERT INTO admin_sessions (token, admin_id) VALUES ($1, $2)', [token, admin.id]);
   res.json({ token, username: admin.username, isSuperAdmin: admin.is_super_admin });
 });
 
-// Get all admins (super admin only)
 app.get('/admin/admins', requireSuperAdmin, async (req, res) => {
   const result = await pool.query('SELECT id, username, is_super_admin, created_at FROM admins ORDER BY created_at');
   res.json(result.rows);
 });
 
-// Add admin (super admin only)
 app.post('/admin/admins', requireSuperAdmin, async (req, res) => {
   const { username, password, isSuperAdmin } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-  const hash = hashPassword(password);
   try {
     await pool.query(
       'INSERT INTO admins (username, password_hash, is_super_admin) VALUES ($1, $2, $3)',
-      [username, hash, isSuperAdmin || false]
+      [username, hashPassword(password), isSuperAdmin || false]
     );
     res.json({ success: true });
   } catch (err) {
@@ -425,29 +548,100 @@ app.post('/admin/admins', requireSuperAdmin, async (req, res) => {
   }
 });
 
-// Delete admin (super admin only)
 app.delete('/admin/admins/:id', requireSuperAdmin, async (req, res) => {
   if (req.admin.id === parseInt(req.params.id)) return res.status(400).json({ error: 'Cannot delete yourself' });
   await pool.query('DELETE FROM admins WHERE id = $1', [req.params.id]);
   res.json({ success: true });
 });
 
-// Change password
 app.post('/admin/change-password', requireAdmin, async (req, res) => {
   const { newPassword } = req.body;
-  if (!newPassword) return res.status(400).json({ error: 'New password required' });
-  const hash = hashPassword(newPassword);
-  await pool.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [hash, req.admin.id]);
+  await pool.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [hashPassword(newPassword), req.admin.id]);
   res.json({ success: true });
 });
 
-// ── REPORTING ENDPOINTS ──────────────────────────────────────
+// ── ADMIN REP MANAGEMENT ─────────────────────────────────────
+app.get('/admin/reps', requireAdmin, async (req, res) => {
+  const result = await pool.query('SELECT id, name, email, active, profile_pic, invited_at, last_login FROM reps ORDER BY name');
+  res.json(result.rows);
+});
 
-// Summary stats
+app.post('/admin/reps/invite', requireAdmin, async (req, res) => {
+  const { name, email } = req.body;
+  if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
+  try {
+    const repResult = await pool.query(
+      'INSERT INTO reps (name, email) VALUES ($1, $2) RETURNING id',
+      [name, email.toLowerCase()]
+    );
+    const repId = repResult.rows[0].id;
+    const token = generateToken();
+    await pool.query('INSERT INTO rep_invites (token, rep_id) VALUES ($1, $2)', [token, repId]);
+    const baseUrl = process.env.APP_URL || 'https://lead-claim-server-production.up.railway.app';
+    const inviteUrl = `${baseUrl}/invite.html?token=${token}`;
+    const html = `
+      <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h1 style="color: #1D9E75; font-size: 28px; margin: 0;">⚡ Voltlead</h1>
+          <p style="color: #888; margin-top: 4px;">Real-time Lead Claiming</p>
+        </div>
+        <div style="background: #f9f9f9; border-radius: 12px; padding: 32px;">
+          <h2 style="margin: 0 0 12px; font-size: 20px;">You're invited, ${name}!</h2>
+          <p style="color: #555; line-height: 1.6;">You've been added to the Voltlead lead claiming platform. Click the button below to set your password and get started.</p>
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${inviteUrl}" style="background: #1D9E75; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block;">Accept Invitation</a>
+          </div>
+          <p style="color: #aaa; font-size: 13px; text-align: center;">This link expires in 7 days. If you didn't expect this email, you can ignore it.</p>
+        </div>
+      </div>
+    `;
+    await sendEmail(email, 'You\'re invited to Voltlead', html);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'A rep with this email already exists' });
+    res.status(500).json({ error: 'Failed to create invitation' });
+  }
+});
+
+app.post('/admin/reps/:id/resend-invite', requireAdmin, async (req, res) => {
+  const rep = await pool.query('SELECT * FROM reps WHERE id = $1', [req.params.id]);
+  if (rep.rows.length === 0) return res.status(404).json({ error: 'Rep not found' });
+  const token = generateToken();
+  await pool.query('UPDATE rep_invites SET used = TRUE WHERE rep_id = $1', [req.params.id]);
+  await pool.query('INSERT INTO rep_invites (token, rep_id) VALUES ($1, $2)', [token, req.params.id]);
+  const baseUrl = process.env.APP_URL || 'https://lead-claim-server-production.up.railway.app';
+  const inviteUrl = `${baseUrl}/invite.html?token=${token}`;
+  const html = `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:40px 20px;"><h1 style="color:#1D9E75;">⚡ Voltlead</h1><p>Hi ${rep.rows[0].name},</p><p>Here's your new invitation link to access Voltlead:</p><div style="text-align:center;margin:32px 0;"><a href="${inviteUrl}" style="background:#1D9E75;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;">Set Password</a></div><p style="color:#aaa;font-size:13px;">This link expires in 7 days.</p></div>`;
+  await sendEmail(rep.rows[0].email, 'Your Voltlead invitation', html);
+  res.json({ success: true });
+});
+
+app.patch('/admin/reps/:id/toggle', requireAdmin, async (req, res) => {
+  const result = await pool.query('UPDATE reps SET active = NOT active WHERE id = $1 RETURNING active', [req.params.id]);
+  res.json({ active: result.rows[0].active });
+});
+
+app.post('/admin/reps/:id/reset-password', requireAdmin, async (req, res) => {
+  const { newPassword } = req.body;
+  if (!newPassword) return res.status(400).json({ error: 'Password required' });
+  await pool.query('UPDATE reps SET password_hash = $1 WHERE id = $2', [hashPassword(newPassword), req.params.id]);
+  await pool.query('DELETE FROM rep_sessions WHERE rep_id = $1', [req.params.id]);
+  res.json({ success: true });
+});
+
+app.post('/admin/reps/:id/reset-cooldown', requireAdmin, async (req, res) => {
+  const rep = await pool.query('SELECT name FROM reps WHERE id = $1', [req.params.id]);
+  if (rep.rows.length === 0) return res.status(404).json({ error: 'Rep not found' });
+  const name = rep.rows[0].name;
+  delete repCooldowns[name];
+  delete repActiveLeads[name];
+  res.json({ success: true });
+});
+
+// ── ADMIN REPORTING ──────────────────────────────────────────
 app.get('/admin/stats', requireAdmin, async (req, res) => {
   const { from, to } = req.query;
   const dateFilter = from && to ? `AND l.received_at BETWEEN '${from}' AND '${to}'` : '';
-
   const [totals, byRep, byDisposition, byLeadType, avgResponse, waiting] = await Promise.all([
     pool.query(`SELECT COUNT(*) as total_leads FROM leads l WHERE 1=1 ${dateFilter}`),
     pool.query(`
@@ -459,30 +653,23 @@ app.get('/admin/stats', requireAdmin, async (req, res) => {
         COUNT(DISTINCT CASE WHEN e.disposition IN ('not_qualified','not_interested','wrong_number') THEN e.lead_id END) as negative
       FROM lead_events e
       JOIN leads l ON e.lead_id = l.id
-      WHERE e.event_type IN ('claimed','disposed') ${dateFilter.replace('l.received_at', 'l.received_at')}
+      WHERE e.event_type IN ('claimed','disposed') ${dateFilter.replace('l.received_at','l.received_at')}
       GROUP BY e.rep_name ORDER BY claimed DESC
     `),
     pool.query(`
-      SELECT e.disposition, COUNT(*) as count
-      FROM lead_events e
+      SELECT e.disposition, COUNT(*) as count FROM lead_events e
       JOIN leads l ON e.lead_id = l.id
       WHERE e.event_type = 'disposed' ${dateFilter}
       GROUP BY e.disposition ORDER BY count DESC
     `),
-    pool.query(`
-      SELECT l.lead_type, COUNT(*) as count
-      FROM leads l WHERE 1=1 ${dateFilter}
-      GROUP BY l.lead_type
-    `),
+    pool.query(`SELECT l.lead_type, COUNT(*) as count FROM leads l WHERE 1=1 ${dateFilter} GROUP BY l.lead_type`),
     pool.query(`
       SELECT AVG(EXTRACT(EPOCH FROM (claim.created_at - l.received_at))) as avg_seconds
-      FROM lead_events claim
-      JOIN leads l ON claim.lead_id = l.id
+      FROM lead_events claim JOIN leads l ON claim.lead_id = l.id
       WHERE claim.event_type = 'claimed' ${dateFilter}
     `),
     pool.query('SELECT COUNT(*) as count FROM waiting_queue'),
   ]);
-
   res.json({
     totalLeads: parseInt(totals.rows[0].total_leads),
     byRep: byRep.rows,
@@ -493,7 +680,6 @@ app.get('/admin/stats', requireAdmin, async (req, res) => {
   });
 });
 
-// Full lead list
 app.get('/admin/leads', requireAdmin, async (req, res) => {
   const { from, to, rep, disposition } = req.query;
   let where = 'WHERE 1=1';
@@ -501,25 +687,75 @@ app.get('/admin/leads', requireAdmin, async (req, res) => {
   if (from && to) { params.push(from, to); where += ` AND l.received_at BETWEEN $${params.length-1} AND $${params.length}`; }
   if (rep) { params.push(rep); where += ` AND claim_event.rep_name = $${params.length}`; }
   if (disposition) { params.push(disposition); where += ` AND dispose_event.disposition = $${params.length}`; }
-
   const result = await pool.query(`
     SELECT l.*,
-      claim_event.rep_name as claimed_by,
-      claim_event.created_at as claimed_at,
-      dispose_event.disposition,
-      dispose_event.notes,
-      dispose_event.created_at as disposed_at
+      claim_event.rep_name as claimed_by, claim_event.created_at as claimed_at,
+      dispose_event.disposition, dispose_event.notes, dispose_event.created_at as disposed_at
     FROM leads l
     LEFT JOIN lead_events claim_event ON l.id = claim_event.lead_id AND claim_event.event_type = 'claimed'
     LEFT JOIN lead_events dispose_event ON l.id = dispose_event.lead_id AND dispose_event.event_type = 'disposed'
-    ${where}
-    ORDER BY l.received_at DESC
-    LIMIT 500
+    ${where} ORDER BY l.received_at DESC LIMIT 500
   `, params);
   res.json(result.rows);
 });
 
-// CSV export
+// Delete lead
+app.delete('/admin/leads/:id', requireAdmin, async (req, res) => {
+  await pool.query('DELETE FROM lead_events WHERE lead_id = $1', [req.params.id]);
+  await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [req.params.id]);
+  await pool.query('DELETE FROM leads WHERE id = $1', [req.params.id]);
+  delete leadData[req.params.id];
+  res.json({ success: true });
+});
+
+// Manual lead addition
+app.post('/admin/leads/manual', requireAdmin, async (req, res) => {
+  const body = req.body;
+  const phone = body.phone || '';
+  const campaignName = (body.campaignName || '').toLowerCase();
+  const leadType = campaignName.includes('equipment') ? 'Equipment Financing' : 'Working Capital';
+  const tz = getTimezoneForPhone(phone);
+  const withinHours = isWithinCallingHours(phone);
+
+  const lead = {
+    id: `lead_${Date.now()}`,
+    receivedAt: new Date().toISOString(),
+    leadType, timezone: tz, withinCallingHours: withinHours,
+    firstName: body.firstName || '',
+    lastName: body.lastName || '',
+    phone,
+    email: body.email || '',
+    companyName: body.companyName || '',
+    state: body.state || '',
+    qualifyAmount: body.qualifyAmount || '',
+    timeline: body.timeline || '',
+    timeInBusiness: body.timeInBusiness || '',
+    monthlyRevenue: body.monthlyRevenue || '',
+    fundsUsedFor: body.fundsUsedFor || '',
+    conductsBusiness: body.conductsBusiness || '',
+    campaignName: body.campaignName || 'Manual Entry',
+    formName: 'Admin Manual',
+  };
+
+  leadData[lead.id] = lead;
+  try {
+    await pool.query(`
+      INSERT INTO leads (id, lead_type, first_name, last_name, phone, email, company_name, state,
+        timezone, within_calling_hours, qualify_amount, timeline, time_in_business, monthly_revenue,
+        funds_used_for, conducts_business, campaign_name, form_name)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+    `, [lead.id, lead.leadType, lead.firstName, lead.lastName, lead.phone, lead.email,
+        lead.companyName, lead.state, lead.timezone, lead.withinCallingHours,
+        lead.qualifyAmount, lead.timeline, lead.timeInBusiness, lead.monthlyRevenue,
+        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName]);
+  } catch (err) {
+    console.error('DB insert error:', err);
+  }
+
+  broadcastAll({ type: 'new_lead', lead: { id: lead.id, leadType, withinCallingHours: withinHours, timezone: tz } });
+  res.json({ success: true, leadId: lead.id });
+});
+
 app.get('/admin/export', requireAdmin, async (req, res) => {
   const { from, to } = req.query;
   const dateFilter = from && to ? `AND l.received_at BETWEEN '${from}' AND '${to}'` : '';
@@ -532,10 +768,8 @@ app.get('/admin/export', requireAdmin, async (req, res) => {
     FROM leads l
     LEFT JOIN lead_events claim_event ON l.id = claim_event.lead_id AND claim_event.event_type = 'claimed'
     LEFT JOIN lead_events dispose_event ON l.id = dispose_event.lead_id AND dispose_event.event_type = 'disposed'
-    WHERE 1=1 ${dateFilter}
-    ORDER BY l.received_at DESC
+    WHERE 1=1 ${dateFilter} ORDER BY l.received_at DESC
   `);
-
   const headers = ['Received','Lead Type','First Name','Last Name','Phone','Email','Company','State','Timezone',
     'Qualify Amount','Timeline','Time in Business','Monthly Revenue','Funds Used For',
     'Claimed By','Claimed At','Disposition','Notes','Disposed At'];
@@ -545,19 +779,16 @@ app.get('/admin/export', requireAdmin, async (req, res) => {
     r.time_in_business, r.monthly_revenue, r.funds_used_for,
     r.claimed_by, r.claimed_at, r.disposition, r.notes, r.disposed_at
   ].map(v => `"${(v||'').toString().replace(/"/g,'""')}"`).join(','));
-
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename=leads.csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=voltlead-leads.csv');
   res.send([headers.join(','), ...rows].join('\n'));
 });
 
-// Waiting queue
 app.get('/admin/waiting', requireAdmin, async (req, res) => {
   const result = await pool.query('SELECT * FROM waiting_queue ORDER BY added_at ASC');
   res.json(result.rows);
 });
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', connected: clients.size, leads: Object.keys(leadData).length });
 });
@@ -571,7 +802,7 @@ function broadcastAll(data) {
 
 const PORT = process.env.PORT || 3000;
 initDB().then(() => {
-  server.listen(PORT, () => console.log(`Server on port ${PORT}`));
+  server.listen(PORT, () => console.log(`Voltlead server on port ${PORT}`));
 }).catch(err => {
   console.error('DB init failed:', err);
   process.exit(1);
