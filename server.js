@@ -1,638 +1,845 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Voltlead — Admin</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #111; }
-    #login-screen { position: fixed; inset: 0; background: #f0f2f5; display: flex; align-items: center; justify-content: center; z-index: 200; }
-    .login-card { background: #fff; border-radius: 14px; border: 1px solid #e0e0e0; padding: 2.5rem; width: 360px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.07); }
-    .login-logo { font-size: 26px; font-weight: 800; color: #1D9E75; margin-bottom: 4px; }
-    .login-logo span { color: #111; }
-    .login-sub { font-size: 13px; color: #888; margin-bottom: 1.5rem; }
-    .login-card input { width: 100%; padding: 11px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-bottom: 10px; outline: none; }
-    .login-card input:focus { border-color: #1D9E75; }
-    .login-card button { width: 100%; padding: 12px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
-    .login-card button:hover { background: #0F6E56; }
-    .login-error { color: #c0392b; font-size: 13px; margin-top: 8px; }
-    #app { display: none; }
-    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 220px; background: #0d1117; color: #fff; padding: 1.5rem 0; }
-    .sidebar-logo { padding: 0 1.5rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 1rem; }
-    .sidebar-logo h2 { font-size: 18px; font-weight: 800; color: #1D9E75; }
-    .sidebar-logo h2 span { color: #fff; }
-    .sidebar-logo p { font-size: 12px; color: #555; margin-top: 2px; }
-    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 1.5rem; font-size: 14px; color: #888; cursor: pointer; transition: all 0.15s; }
-    .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
-    .nav-item.active { background: rgba(29,158,117,0.15); color: #1D9E75; border-right: 3px solid #1D9E75; }
-    .sidebar-footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 1rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.08); }
-    .sidebar-user { font-size: 13px; color: #555; margin-bottom: 8px; }
-    .sidebar-user strong { color: #fff; display: block; }
-    .logout-btn { width: 100%; padding: 8px; background: rgba(255,255,255,0.05); color: #888; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; font-size: 13px; cursor: pointer; }
-    .logout-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-    .main { margin-left: 220px; padding: 2rem; min-height: 100vh; }
-    .page { display: none; }
-    .page.active { display: block; }
-    .page-title { font-size: 22px; font-weight: 700; margin-bottom: 1.5rem; }
-    .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap; }
-    .filter-bar input[type=date], .filter-bar select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: #fff; }
-    .btn { padding: 8px 18px; border-radius: 8px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; }
-    .btn-primary { background: #1D9E75; color: #fff; } .btn-primary:hover { background: #0F6E56; }
-    .btn-outline { background: #fff; color: #333; border: 1px solid #ddd; } .btn-outline:hover { background: #f5f5f5; }
-    .btn-danger { background: #e74c3c; color: #fff; } .btn-danger:hover { background: #c0392b; }
-    .btn-warn { background: #F5A623; color: #fff; } .btn-warn:hover { background: #D4881A; }
-    .btn-sm { padding: 5px 12px; font-size: 12px; }
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 1.5rem; }
-    .stat-card { background: #fff; border-radius: 12px; border: 1px solid #e8e8e8; padding: 16px 20px; }
-    .stat-card .label { font-size: 12px; color: #888; margin-bottom: 6px; }
-    .stat-card .value { font-size: 28px; font-weight: 700; }
-    .stat-card .sub { font-size: 12px; color: #aaa; margin-top: 2px; }
-    .value.green { color: #0F6E56; } .value.blue { color: #185FA5; } .value.red { color: #993C1D; } .value.orange { color: #D4881A; }
-    .table-card { background: #fff; border-radius: 12px; border: 1px solid #e8e8e8; overflow: hidden; margin-bottom: 1.5rem; }
-    .table-card-header { padding: 14px 20px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; }
-    .table-card-header h3 { font-size: 15px; font-weight: 600; }
-    table { width: 100%; border-collapse: collapse; }
-    th { padding: 10px 16px; text-align: left; font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #f0f0f0; background: #fafafa; }
-    td { padding: 10px 16px; font-size: 13px; border-bottom: 1px solid #f8f8f8; }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #fafafa; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 11px; font-weight: 600; }
-    .badge-positive { background: #E1F5EE; color: #085041; }
-    .badge-vs { background: #E6F1FB; color: #0C447C; }
-    .badge-negative { background: #FCEBEB; color: #791F1F; }
-    .badge-unclaimed { background: #f0f0f0; color: #888; }
-    .badge-active { background: #E1F5EE; color: #085041; }
-    .badge-inactive { background: #f0f0f0; color: #888; }
-    .rep-row { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #f0f0f0; }
-    .rep-row:last-child { border-bottom: none; }
-    .rep-rank { font-size: 18px; font-weight: 700; color: #ddd; width: 28px; }
-    .rep-rank.top { color: #F5A623; }
-    .rep-avatar { width: 36px; height: 36px; border-radius: 50%; background: #CECBF6; color: #3C3489; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; overflow: hidden; }
-    .rep-avatar img { width: 100%; height: 100%; object-fit: cover; }
-    .rep-name { font-size: 14px; font-weight: 600; flex: 1; }
-    .rep-stats { display: flex; gap: 16px; font-size: 12px; }
-    .rep-stat { text-align: center; }
-    .rep-stat .val { font-weight: 700; font-size: 16px; }
-    .rep-stat .lbl { color: #aaa; }
-    .form-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; padding: 20px; margin-bottom: 1.5rem; }
-    .form-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .form-group { display: flex; flex-direction: column; gap: 5px; }
-    .form-group label { font-size: 12px; color: #666; font-weight: 500; }
-    .form-group input, .form-group select { padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; width: 100%; }
-    .form-group input:focus, .form-group select:focus { border-color: #1D9E75; }
-    .form-row-inline { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
-    .admin-list { display: flex; flex-direction: column; gap: 10px; }
-    .admin-item { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; gap: 12px; }
-    .admin-item-info { flex: 1; }
-    .admin-item-name { font-size: 14px; font-weight: 600; }
-    .admin-item-sub { font-size: 12px; color: #888; }
-    .super-badge { background: #FFF3CD; color: #856404; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; margin-left: 6px; }
-    .empty-msg { text-align: center; padding: 2rem; color: #aaa; font-size: 14px; }
-    .loading { text-align: center; padding: 2rem; color: #aaa; }
-    .form-msg { font-size: 13px; margin-top: 8px; }
-    .form-msg.success { color: #0F6E56; }
-    .form-msg.error { color: #c0392b; }
-    .rep-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-    .delete-btn { background: none; border: none; cursor: pointer; color: #e74c3c; font-size: 16px; padding: 2px 6px; border-radius: 4px; }
-    .delete-btn:hover { background: #FCEBEB; }
-  </style>
-</head>
-<body>
+const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
+const path = require('path');
+const { Pool } = require('pg');
+const crypto = require('crypto');
 
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">⚡ Volt<span>lead</span></div>
-    <div class="login-sub">Admin Dashboard</div>
-    <input type="text" id="login-user" placeholder="Username" />
-    <input type="password" id="login-pass" placeholder="Password" />
-    <button onclick="doLogin()">Sign In</button>
-    <div class="login-error" id="login-error"></div>
-  </div>
-</div>
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-<div id="app">
-  <div class="sidebar">
-    <div class="sidebar-logo">
-      <h2>⚡ Volt<span>lead</span></h2>
-      <p>Admin Dashboard</p>
-    </div>
-    <div class="nav-item active" onclick="showPage('dashboard', this)">📊 Dashboard</div>
-    <div class="nav-item" onclick="showPage('leads', this)">📋 All Leads</div>
-    <div class="nav-item" onclick="showPage('manual', this)">➕ Add Lead</div>
-    <div class="nav-item" onclick="showPage('waiting', this)">⏳ Waiting Queue</div>
-    <div class="nav-item" onclick="showPage('reps', this)">👤 Manage Reps</div>
-    <div class="nav-item" onclick="showPage('admins', this)" id="admins-nav" style="display:none">🔐 Manage Admins</div>
-    <div class="nav-item" onclick="showPage('password', this)">🔑 Change Password</div>
-    <div class="nav-item" onclick="switchToClaimer()" style="color:#F5A623;margin-top:8px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px">🎯 Switch to Claimer</div>
-    <div class="sidebar-footer">
-      <div class="sidebar-user"><strong id="sidebar-username">...</strong>Admin</div>
-      <button class="logout-btn" onclick="logout()">Sign Out</button>
-    </div>
-  </div>
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-  <div class="main">
+// ── DATABASE ─────────────────────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
-    <!-- DASHBOARD -->
-    <div class="page active" id="page-dashboard">
-      <div class="page-title">Dashboard</div>
-      <div class="filter-bar">
-        <input type="date" id="d-from" /><span style="color:#888">to</span><input type="date" id="d-to" />
-        <button class="btn btn-primary" onclick="loadDashboard()">Apply</button>
-        <button class="btn btn-outline" onclick="clearDateFilter()">All Time</button>
-        <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
-      </div>
-      <div class="stat-grid">
-        <div class="stat-card"><div class="label">Total Leads</div><div class="value" id="s-total">—</div></div>
-        <div class="stat-card"><div class="label">Claimed</div><div class="value green" id="s-claimed">—</div></div>
-        <div class="stat-card"><div class="label">Positive</div><div class="value green" id="s-positive">—</div></div>
-        <div class="stat-card"><div class="label">→ VanillaSoft</div><div class="value blue" id="s-vs">—</div></div>
-        <div class="stat-card"><div class="label">Negative</div><div class="value red" id="s-neg">—</div></div>
-        <div class="stat-card"><div class="label">Waiting</div><div class="value orange" id="s-wait">—</div></div>
-        <div class="stat-card"><div class="label">Avg Response</div><div class="value" id="s-resp">—</div><div class="sub">to claim</div></div>
-      </div>
-      <div class="table-card">
-        <div class="table-card-header"><h3>🏆 Rep Leaderboard</h3></div>
-        <div id="rep-leaderboard"><div class="loading">Loading...</div></div>
-      </div>
-      <div class="table-card">
-        <div class="table-card-header"><h3>Dispositions Breakdown</h3></div>
-        <table><thead><tr><th>Disposition</th><th>Count</th></tr></thead>
-        <tbody id="disposition-table"><tr><td colspan="2" class="loading">Loading...</td></tr></tbody></table>
-      </div>
-    </div>
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS leads (
+      id TEXT PRIMARY KEY,
+      lead_type TEXT,
+      first_name TEXT,
+      last_name TEXT,
+      phone TEXT,
+      email TEXT,
+      company_name TEXT,
+      state TEXT,
+      timezone TEXT,
+      within_calling_hours BOOLEAN,
+      qualify_amount TEXT,
+      timeline TEXT,
+      time_in_business TEXT,
+      monthly_revenue TEXT,
+      funds_used_for TEXT,
+      conducts_business TEXT,
+      campaign_name TEXT,
+      form_name TEXT,
+      received_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
-    <!-- ALL LEADS -->
-    <div class="page" id="page-leads">
-      <div class="page-title">All Leads</div>
-      <div class="filter-bar">
-        <input type="date" id="l-from" /><span style="color:#888">to</span><input type="date" id="l-to" />
-        <select id="l-rep"><option value="">All Reps</option></select>
-        <select id="l-disp">
-          <option value="">All Dispositions</option>
-          <option value="imn_app_taken">IMN App Taken</option><option value="imn_app_sent">IMN App Sent</option>
-          <option value="left_message">Left Message</option><option value="no_answer">No Answer</option>
-          <option value="in_market_later">In Market Later</option><option value="not_qualified">Not Qualified</option>
-          <option value="not_interested">Not Interested</option><option value="wrong_number">Wrong Number</option>
-        </select>
-        <button class="btn btn-primary" onclick="loadLeads()">Search</button>
-        <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
-      </div>
-      <div class="table-card">
-        <div class="table-card-header"><h3>Leads</h3><span id="leads-count" style="font-size:13px;color:#888"></span></div>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th></th><th>Received</th><th>Type</th><th>Name</th><th>Phone</th><th>Company</th><th>State</th><th>Qualify</th><th>Claimed By</th><th>Disposition</th><th>Notes</th></tr></thead>
-            <tbody id="leads-table"><tr><td colspan="11" class="loading">Run a search above</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    CREATE TABLE IF NOT EXISTS lead_events (
+      id SERIAL PRIMARY KEY,
+      lead_id TEXT,
+      event_type TEXT,
+      rep_name TEXT,
+      disposition TEXT,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
-    <!-- MANUAL LEAD -->
-    <div class="page" id="page-manual">
-      <div class="page-title">Add Lead Manually</div>
-      <div class="form-card">
-        <h3>Lead Information</h3>
-        <div class="form-grid" style="margin-bottom:12px">
-          <div class="form-group"><label>First Name *</label><input type="text" id="m-fname" placeholder="First name" /></div>
-          <div class="form-group"><label>Last Name *</label><input type="text" id="m-lname" placeholder="Last name" /></div>
-          <div class="form-group"><label>Phone *</label><input type="tel" id="m-phone" placeholder="(555) 555-5555" /></div>
-          <div class="form-group"><label>Email</label><input type="email" id="m-email" placeholder="email@example.com" /></div>
-          <div class="form-group"><label>Company Name</label><input type="text" id="m-company" placeholder="Company name" /></div>
-          <div class="form-group"><label>State</label><input type="text" id="m-state" placeholder="NY" maxlength="2" /></div>
-          <div class="form-group"><label>Lead Type *</label>
-            <select id="m-type">
-              <option value="Working Capital Campaign">Working Capital</option>
-              <option value="Equipment Financing Campaign">Equipment Financing</option>
-            </select>
-          </div>
-          <div class="form-group"><label>Qualify Amount</label><input type="text" id="m-qualify" placeholder="$50,000" /></div>
-          <div class="form-group"><label>Timeline</label><input type="text" id="m-timeline" placeholder="Within 30 days" /></div>
-          <div class="form-group"><label>Time in Business</label><input type="text" id="m-tib" placeholder="5 years" /></div>
-          <div class="form-group"><label>Monthly Revenue</label><input type="text" id="m-revenue" placeholder="$40,000" /></div>
-          <div class="form-group"><label>Funds Used For</label><input type="text" id="m-funds" placeholder="Equipment purchase" /></div>
-        </div>
-        <div class="form-group" style="margin-bottom:14px"><label>Conducts Business</label><input type="text" id="m-conducts" placeholder="Storefront, online, etc." /></div>
-        <button class="btn btn-primary" onclick="addManualLead()" style="min-width:160px">🚀 Send to Reps Live</button>
-        <div class="form-msg" id="manual-msg"></div>
-      </div>
-    </div>
+    CREATE TABLE IF NOT EXISTS waiting_queue (
+      lead_id TEXT PRIMARY KEY,
+      lead_data JSONB,
+      added_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
-    <!-- WAITING QUEUE -->
-    <div class="page" id="page-waiting">
-      <div class="page-title">Waiting Queue</div>
-      <div class="table-card">
-        <div class="table-card-header"><h3>Unclaimed Leads</h3><button class="btn btn-outline btn-sm" onclick="loadWaiting()">Refresh</button></div>
-        <table><thead><tr><th>Lead Type</th><th>Timezone</th><th>Added</th><th>Age</th></tr></thead>
-        <tbody id="waiting-table"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody></table>
-      </div>
-    </div>
+    CREATE TABLE IF NOT EXISTS admins (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      is_super_admin BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
-    <!-- MANAGE REPS -->
-    <div class="page" id="page-reps">
-      <div class="page-title">Manage Reps</div>
-      <div class="form-card">
-        <h3>Invite New Rep</h3>
-        <div class="form-row-inline">
-          <div class="form-group"><label>Full Name</label><input type="text" id="rep-name" placeholder="Jane Smith" /></div>
-          <div class="form-group"><label>Email Address</label><input type="email" id="rep-email" placeholder="jane@company.com" /></div>
-          <button class="btn btn-primary" onclick="inviteRep()" style="align-self:flex-end">Send Invite</button>
-        </div>
-        <div class="form-msg" id="invite-msg"></div>
-      </div>
-      <div class="table-card">
-        <div class="table-card-header"><h3>All Reps</h3><button class="btn btn-outline btn-sm" onclick="loadReps()">Refresh</button></div>
-        <table>
-          <thead><tr><th>Rep</th><th>Email</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead>
-          <tbody id="reps-table"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
-        </table>
-      </div>
-    </div>
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      token TEXT PRIMARY KEY,
+      admin_id INTEGER REFERENCES admins(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '24 hours'
+    );
 
-    <!-- MANAGE ADMINS -->
-    <div class="page" id="page-admins">
-      <div class="page-title">Manage Admins</div>
-      <div class="form-card">
-        <h3>Add New Admin</h3>
-        <div class="form-row-inline">
-          <div class="form-group"><label>Username</label><input type="text" id="new-username" placeholder="username" /></div>
-          <div class="form-group"><label>Password</label><input type="password" id="new-password" placeholder="password" /></div>
-          <button class="btn btn-primary" onclick="addAdmin()" style="align-self:flex-end">Add Admin</button>
-        </div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:13px">
-          <input type="checkbox" id="new-super" /><label for="new-super">Super Admin (can manage other admins)</label>
-        </div>
-        <div class="form-msg" id="add-admin-msg"></div>
-      </div>
-      <div class="admin-list" id="admin-list"><div class="loading">Loading...</div></div>
-    </div>
+    CREATE TABLE IF NOT EXISTS reps (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      profile_pic TEXT,
+      active BOOLEAN DEFAULT TRUE,
+      invited_at TIMESTAMPTZ DEFAULT NOW(),
+      last_login TIMESTAMPTZ
+    );
 
-    <!-- CHANGE PASSWORD -->
-    <div class="page" id="page-password">
-      <div class="page-title">Change Password</div>
-      <div class="form-card" style="max-width:400px">
-        <h3>New Password</h3>
-        <div class="form-group" style="margin-bottom:10px"><label>New Password</label><input type="password" id="new-pw" placeholder="Enter new password" /></div>
-        <div class="form-group" style="margin-bottom:14px"><label>Confirm Password</label><input type="password" id="confirm-pw" placeholder="Confirm new password" /></div>
-        <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
-        <div class="form-msg" id="pw-msg"></div>
-      </div>
-    </div>
+    CREATE TABLE IF NOT EXISTS rep_sessions (
+      token TEXT PRIMARY KEY,
+      rep_id INTEGER REFERENCES reps(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days'
+    );
 
-  </div>
-</div>
+    CREATE TABLE IF NOT EXISTS rep_invites (
+      token TEXT PRIMARY KEY,
+      rep_id INTEGER REFERENCES reps(id) ON DELETE CASCADE,
+      used BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days'
+    );
+  `);
 
-<script>
-  const API = '';
-  let token = localStorage.getItem('admin_token') || '';
-  let currentAdmin = JSON.parse(localStorage.getItem('admin_info') || '{}');
+  // Default super admin
+  const existing = await pool.query('SELECT id FROM admins WHERE is_super_admin = TRUE LIMIT 1');
+  if (existing.rows.length === 0) {
+    const hash = hashPassword('changeme123');
+    await pool.query(
+      'INSERT INTO admins (username, password_hash, is_super_admin) VALUES ($1, $2, TRUE) ON CONFLICT DO NOTHING',
+      ['admin', hash]
+    );
+    console.log('Default super admin created: admin / changeme123');
+  }
+  console.log('Database initialized');
+}
 
-  const dispMap = {
-    imn_app_taken:'IMN App Taken', imn_app_sent:'IMN App Sent',
-    left_message:'Left Message', no_answer:'No Answer', in_market_later:'In Market Later',
-    not_qualified:'Not Qualified', not_interested:'Not Interested', wrong_number:'Wrong Number'
+// ── IN-MEMORY STATE ──────────────────────────────────────────
+const claimedLeads = {};
+const leadData = {};
+const clients = new Set();
+const repCooldowns = {};
+const repActiveLeads = {};
+const COOLDOWN_MS = 60000;
+
+// ── HELPERS ──────────────────────────────────────────────────
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password + 'voltlead_salt').digest('hex');
+}
+
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+async function sendEmail(to, subject, html) {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@voltlead.io';
+  if (!apiKey) { console.warn('No SendGrid API key'); return; }
+  try {
+    const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: fromEmail, name: 'Voltlead' },
+        subject,
+        content: [{ type: 'text/html', value: html }]
+      })
+    });
+    if (res.ok) console.log(`Email sent to ${to}`);
+    else console.error(`SendGrid error: ${res.status}`, await res.text());
+  } catch (err) {
+    console.error('Email error:', err);
+  }
+}
+
+// ── TIMEZONE HELPERS ─────────────────────────────────────────
+const areaCodeTimezones = {
+  '201':'America/New_York','202':'America/New_York','203':'America/New_York','207':'America/New_York',
+  '212':'America/New_York','215':'America/New_York','216':'America/New_York','217':'America/Chicago',
+  '218':'America/Chicago','219':'America/Chicago','224':'America/Chicago','225':'America/Chicago',
+  '228':'America/Chicago','229':'America/New_York','231':'America/New_York','234':'America/New_York',
+  '239':'America/New_York','240':'America/New_York','248':'America/New_York','251':'America/Chicago',
+  '252':'America/New_York','256':'America/Chicago','260':'America/New_York','267':'America/New_York',
+  '269':'America/New_York','270':'America/Chicago','272':'America/New_York','276':'America/New_York',
+  '281':'America/Chicago','301':'America/New_York','302':'America/New_York','303':'America/Denver',
+  '304':'America/New_York','305':'America/New_York','309':'America/Chicago','310':'America/Los_Angeles',
+  '312':'America/Chicago','313':'America/New_York','314':'America/Chicago','315':'America/New_York',
+  '316':'America/Chicago','317':'America/New_York','318':'America/Chicago','319':'America/Chicago',
+  '320':'America/Chicago','321':'America/New_York','323':'America/Los_Angeles','325':'America/Chicago',
+  '330':'America/New_York','331':'America/Chicago','334':'America/Chicago','336':'America/New_York',
+  '337':'America/Chicago','339':'America/New_York','346':'America/Chicago','347':'America/New_York',
+  '351':'America/New_York','352':'America/New_York','360':'America/Los_Angeles','361':'America/Chicago',
+  '380':'America/New_York','385':'America/Denver','386':'America/New_York','401':'America/New_York',
+  '402':'America/Chicago','404':'America/New_York','405':'America/Chicago','406':'America/Denver',
+  '407':'America/New_York','408':'America/Los_Angeles','409':'America/Chicago','410':'America/New_York',
+  '412':'America/New_York','413':'America/New_York','414':'America/Chicago','415':'America/Los_Angeles',
+  '417':'America/Chicago','419':'America/New_York','423':'America/New_York','424':'America/Los_Angeles',
+  '425':'America/Los_Angeles','430':'America/Chicago','432':'America/Chicago','434':'America/New_York',
+  '435':'America/Denver','440':'America/New_York','442':'America/Los_Angeles','443':'America/New_York',
+  '458':'America/Los_Angeles','463':'America/New_York','469':'America/Chicago','470':'America/New_York',
+  '475':'America/New_York','478':'America/New_York','479':'America/Chicago','480':'America/Phoenix',
+  '484':'America/New_York','501':'America/Chicago','502':'America/New_York','503':'America/Los_Angeles',
+  '504':'America/Chicago','505':'America/Denver','507':'America/Chicago','508':'America/New_York',
+  '509':'America/Los_Angeles','510':'America/Los_Angeles','512':'America/Chicago','513':'America/New_York',
+  '515':'America/Chicago','516':'America/New_York','517':'America/New_York','518':'America/New_York',
+  '520':'America/Phoenix','530':'America/Los_Angeles','531':'America/Chicago','539':'America/Chicago',
+  '540':'America/New_York','541':'America/Los_Angeles','551':'America/New_York','559':'America/Los_Angeles',
+  '561':'America/New_York','562':'America/Los_Angeles','563':'America/Chicago','567':'America/New_York',
+  '570':'America/New_York','571':'America/New_York','573':'America/Chicago','574':'America/New_York',
+  '575':'America/Denver','580':'America/Chicago','585':'America/New_York','586':'America/New_York',
+  '601':'America/Chicago','602':'America/Phoenix','603':'America/New_York','605':'America/Chicago',
+  '606':'America/New_York','607':'America/New_York','608':'America/Chicago','609':'America/New_York',
+  '610':'America/New_York','612':'America/Chicago','614':'America/New_York','615':'America/New_York',
+  '616':'America/New_York','617':'America/New_York','618':'America/Chicago','619':'America/Los_Angeles',
+  '620':'America/Chicago','623':'America/Phoenix','626':'America/Los_Angeles','628':'America/Los_Angeles',
+  '629':'America/New_York','630':'America/Chicago','631':'America/New_York','636':'America/Chicago',
+  '641':'America/Chicago','646':'America/New_York','650':'America/Los_Angeles','651':'America/Chicago',
+  '657':'America/Los_Angeles','660':'America/Chicago','661':'America/Los_Angeles','662':'America/Chicago',
+  '667':'America/New_York','669':'America/Los_Angeles','678':'America/New_York','681':'America/New_York',
+  '682':'America/Chicago','689':'America/New_York','701':'America/Chicago','702':'America/Los_Angeles',
+  '703':'America/New_York','704':'America/New_York','706':'America/New_York','707':'America/Los_Angeles',
+  '708':'America/Chicago','712':'America/Chicago','713':'America/Chicago','714':'America/Los_Angeles',
+  '715':'America/Chicago','716':'America/New_York','717':'America/New_York','718':'America/New_York',
+  '719':'America/Denver','720':'America/Denver','724':'America/New_York','725':'America/Los_Angeles',
+  '726':'America/Chicago','727':'America/New_York','731':'America/Chicago','732':'America/New_York',
+  '734':'America/New_York','737':'America/Chicago','740':'America/New_York','747':'America/Los_Angeles',
+  '754':'America/New_York','757':'America/New_York','760':'America/Los_Angeles','762':'America/New_York',
+  '763':'America/Chicago','765':'America/New_York','769':'America/Chicago','770':'America/New_York',
+  '772':'America/New_York','773':'America/Chicago','774':'America/New_York','775':'America/Los_Angeles',
+  '779':'America/Chicago','781':'America/New_York','785':'America/Chicago','786':'America/New_York',
+  '801':'America/Denver','802':'America/New_York','803':'America/New_York','804':'America/New_York',
+  '805':'America/Los_Angeles','806':'America/Chicago','808':'Pacific/Honolulu','810':'America/New_York',
+  '812':'America/New_York','813':'America/New_York','814':'America/New_York','815':'America/Chicago',
+  '816':'America/Chicago','817':'America/Chicago','818':'America/Los_Angeles','828':'America/New_York',
+  '830':'America/Chicago','831':'America/Los_Angeles','832':'America/Chicago','838':'America/New_York',
+  '843':'America/New_York','845':'America/New_York','847':'America/Chicago','848':'America/New_York',
+  '850':'America/Chicago','856':'America/New_York','857':'America/New_York','858':'America/Los_Angeles',
+  '859':'America/New_York','860':'America/New_York','862':'America/New_York','863':'America/New_York',
+  '864':'America/New_York','865':'America/New_York','870':'America/Chicago','872':'America/Chicago',
+  '878':'America/New_York','901':'America/Chicago','903':'America/Chicago','904':'America/New_York',
+  '906':'America/New_York','907':'America/Anchorage','908':'America/New_York','909':'America/Los_Angeles',
+  '910':'America/New_York','912':'America/New_York','913':'America/Chicago','914':'America/New_York',
+  '915':'America/Denver','916':'America/Los_Angeles','917':'America/New_York','918':'America/Chicago',
+  '919':'America/New_York','920':'America/Chicago','925':'America/Los_Angeles','928':'America/Phoenix',
+  '929':'America/New_York','931':'America/Chicago','936':'America/Chicago','937':'America/New_York',
+  '940':'America/Chicago','941':'America/New_York','947':'America/New_York','949':'America/Los_Angeles',
+  '951':'America/Los_Angeles','952':'America/Chicago','954':'America/New_York','956':'America/Chicago',
+  '959':'America/New_York','970':'America/Denver','971':'America/Los_Angeles','972':'America/Chicago',
+  '973':'America/New_York','978':'America/New_York','979':'America/Chicago','980':'America/New_York',
+  '984':'America/New_York','985':'America/Chicago','989':'America/New_York'
+};
+
+function getTimezoneForPhone(phone) {
+  const cleaned = (phone || '').replace(/\D/g, '');
+  const digits = cleaned.startsWith('1') ? cleaned.slice(1) : cleaned;
+  return areaCodeTimezones[digits.substring(0, 3)] || 'America/New_York';
+}
+
+function isWithinCallingHours(phone) {
+  const tz = getTimezoneForPhone(phone);
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false
+  }).formatToParts(now);
+  const h = parseInt(parts.find(p => p.type === 'hour').value);
+  const m = parseInt(parts.find(p => p.type === 'minute').value);
+  return (h * 60 + m) >= 480 && (h * 60 + m) < 1020;
+}
+
+// ── REP AUTH MIDDLEWARE ──────────────────────────────────────
+async function requireRep(req, res, next) {
+  const token = req.headers['x-rep-token'];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await pool.query(
+    'SELECT r.* FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW() AND r.active = TRUE',
+    [token]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Session expired' });
+  req.rep = result.rows[0];
+  next();
+}
+
+// ── ADMIN AUTH MIDDLEWARE ────────────────────────────────────
+async function requireAdmin(req, res, next) {
+  const token = req.headers['x-admin-token'];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await pool.query(
+    'SELECT a.* FROM admin_sessions s JOIN admins a ON s.admin_id = a.id WHERE s.token = $1 AND s.expires_at > NOW()',
+    [token]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Session expired' });
+  req.admin = result.rows[0];
+  next();
+}
+
+async function requireSuperAdmin(req, res, next) {
+  await requireAdmin(req, res, () => {
+    if (!req.admin.is_super_admin) return res.status(403).json({ error: 'Super admin required' });
+    next();
+  });
+}
+
+// ── WEBSOCKET ────────────────────────────────────────────────
+wss.on('connection', (ws) => {
+  clients.add(ws);
+  console.log(`Connected. Total: ${clients.size}`);
+
+  pool.query('SELECT lead_id, lead_data, added_at FROM waiting_queue ORDER BY added_at ASC')
+    .then(result => {
+      if (result.rows.length > 0) {
+        ws.send(JSON.stringify({ type: 'waiting_queue_init', queue: result.rows }));
+      }
+    }).catch(err => console.error('Queue fetch error:', err));
+
+  ws.on('close', () => clients.delete(ws));
+  ws.on('message', async (data) => {
+    try {
+      const msg = JSON.parse(data);
+
+      if (msg.type === 'claim') {
+        const { leadId, repName } = msg;
+        const now = Date.now();
+        const lastClaim = repCooldowns[repName] || 0;
+        const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastClaim)) / 1000);
+        const hasActive = repActiveLeads[repName] && repActiveLeads[repName] !== leadId;
+
+        if (claimedLeads[leadId]) {
+          ws.send(JSON.stringify({ type: 'claim_failed', leadId, claimedBy: claimedLeads[leadId] }));
+        } else if (hasActive) {
+          ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'active_lead', leadId }));
+        } else if (now - lastClaim < COOLDOWN_MS) {
+          ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'cooldown', secondsLeft, leadId }));
+        } else {
+          claimedLeads[leadId] = repName;
+          repCooldowns[repName] = now;
+          repActiveLeads[repName] = leadId;
+          const lead = leadData[leadId];
+          ws.send(JSON.stringify({ type: 'claim_success', leadId, lead }));
+          broadcastAll({ type: 'lead_claimed', leadId, claimedBy: repName });
+          await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [leadId]);
+          await pool.query(
+            'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
+            [leadId, 'claimed', repName]
+          );
+          console.log(`Lead ${leadId} claimed by ${repName}`);
+        }
+      }
+
+      if (msg.type === 'dispose') {
+        const { leadId, repName, disposition, notes } = msg;
+        const lead = leadData[leadId] || {};
+        handleDisposition({ lead, disposition, notes, repName });
+        if (repActiveLeads[repName] === leadId) delete repActiveLeads[repName];
+        broadcastAll({ type: 'lead_disposed', leadId, disposition, claimedBy: repName });
+        await pool.query(
+          'INSERT INTO lead_events (lead_id, event_type, rep_name, disposition, notes) VALUES ($1, $2, $3, $4, $5)',
+          [leadId, 'disposed', repName, disposition, notes]
+        );
+        console.log(`Disposed ${leadId}: ${disposition} by ${repName}`);
+      }
+
+      if (msg.type === 'pass') {
+        const { leadId, lead } = msg;
+        await addToWaitingQueue(leadId, lead);
+        await pool.query(
+          'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
+          [leadId, 'passed', msg.repName || 'unknown']
+        );
+      }
+
+      if (msg.type === 'expire') {
+        const { leadId, lead } = msg;
+        await addToWaitingQueue(leadId, lead);
+        await pool.query(
+          'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
+          [leadId, 'expired', 'system']
+        );
+      }
+
+    } catch (err) {
+      console.error('Message error:', err);
+    }
+  });
+});
+
+async function addToWaitingQueue(leadId, lead) {
+  try {
+    await pool.query(
+      'INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO NOTHING',
+      [leadId, JSON.stringify(lead)]
+    );
+    broadcastAll({ type: 'lead_waiting', leadId, lead, addedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('Waiting queue error:', err);
+  }
+}
+
+async function handleDisposition({ lead, disposition, notes, repName }) {
+  const payload = { ...lead, notes, disposition, repName, disposedAt: new Date().toISOString() };
+  if (['imn_app_taken', 'imn_app_sent'].includes(disposition)) {
+    await sendToZapier(process.env.ZAPIER_SALESFORCE_WEBHOOK, payload);
+  } else if (['left_message', 'no_answer', 'in_market_later'].includes(disposition)) {
+    await sendToZapier(process.env.ZAPIER_VANILLASOFT_WEBHOOK, payload);
+  }
+}
+
+async function sendToZapier(webhookUrl, payload) {
+  if (!webhookUrl) return console.warn('No webhook URL configured');
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    console.log(`Zapier response: ${res.status}`);
+  } catch (err) {
+    console.error('Zapier error:', err);
+  }
+}
+
+// ── REP AUTH ROUTES ──────────────────────────────────────────
+app.post('/rep/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  const hash = hashPassword(password);
+  const result = await pool.query(
+    'SELECT * FROM reps WHERE email = $1 AND password_hash = $2 AND active = TRUE',
+    [email.toLowerCase(), hash]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
+  const rep = result.rows[0];
+  const token = generateToken();
+  await pool.query('INSERT INTO rep_sessions (token, rep_id) VALUES ($1, $2)', [token, rep.id]);
+  await pool.query('UPDATE reps SET last_login = NOW() WHERE id = $1', [rep.id]);
+  res.json({ token, name: rep.name, email: rep.email, profilePic: rep.profile_pic });
+});
+
+app.post('/rep/logout', requireRep, async (req, res) => {
+  const token = req.headers['x-rep-token'];
+  await pool.query('DELETE FROM rep_sessions WHERE token = $1', [token]);
+  res.json({ success: true });
+});
+
+app.get('/rep/me', requireRep, async (req, res) => {
+  res.json({ name: req.rep.name, email: req.rep.email, profilePic: req.rep.profile_pic });
+});
+
+app.post('/rep/change-password', requireRep, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both passwords required' });
+  const hash = hashPassword(currentPassword);
+  const result = await pool.query('SELECT id FROM reps WHERE id = $1 AND password_hash = $2', [req.rep.id, hash]);
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Current password is incorrect' });
+  await pool.query('UPDATE reps SET password_hash = $1 WHERE id = $2', [hashPassword(newPassword), req.rep.id]);
+  res.json({ success: true });
+});
+
+app.post('/rep/profile-pic', requireRep, async (req, res) => {
+  const { imageData } = req.body;
+  if (!imageData) return res.status(400).json({ error: 'No image data provided' });
+  await pool.query('UPDATE reps SET profile_pic = $1 WHERE id = $2', [imageData, req.rep.id]);
+  res.json({ success: true, profilePic: imageData });
+});
+
+// Invite acceptance — set password from invite link
+app.get('/rep/invite/:token', async (req, res) => {
+  const result = await pool.query(
+    'SELECT i.*, r.name, r.email FROM rep_invites i JOIN reps r ON i.rep_id = r.id WHERE i.token = $1 AND i.used = FALSE AND i.expires_at > NOW()',
+    [req.params.token]
+  );
+  if (result.rows.length === 0) return res.status(404).json({ error: 'Invalid or expired invite link' });
+  res.json({ valid: true, name: result.rows[0].name, email: result.rows[0].email });
+});
+
+app.post('/rep/invite/:token/accept', async (req, res) => {
+  const { password } = req.body;
+  if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const result = await pool.query(
+    'SELECT i.*, r.id as rep_id FROM rep_invites i JOIN reps r ON i.rep_id = r.id WHERE i.token = $1 AND i.used = FALSE AND i.expires_at > NOW()',
+    [req.params.token]
+  );
+  if (result.rows.length === 0) return res.status(404).json({ error: 'Invalid or expired invite link' });
+  const invite = result.rows[0];
+  await pool.query('UPDATE reps SET password_hash = $1 WHERE id = $2', [hashPassword(password), invite.rep_id]);
+  await pool.query('UPDATE rep_invites SET used = TRUE WHERE token = $1', [req.params.token]);
+  res.json({ success: true });
+});
+
+// ── LEAD WEBHOOK ─────────────────────────────────────────────
+app.post('/webhook/lead', async (req, res) => {
+  const body = req.body;
+  const phone = body.phone_number || body.phone || '';
+  const campaignName = (body.campaign_name || '').toLowerCase();
+  const leadType = campaignName.includes('equipment') ? 'Equipment Financing' : 'Working Capital';
+  const tz = getTimezoneForPhone(phone);
+  const withinHours = isWithinCallingHours(phone);
+
+  const lead = {
+    id: `lead_${Date.now()}`,
+    receivedAt: new Date().toISOString(),
+    leadType, timezone: tz, withinCallingHours: withinHours,
+    firstName: body.first_name || '',
+    lastName: body.last_name || '',
+    phone,
+    email: body.email || '',
+    companyName: body.company_name || '',
+    state: body.state || '',
+    qualifyAmount: body.qualify_amount || body.how_much_would_you_like_to_qualify_for || '',
+    timeline: body.timeline || body.how_soon_are_you_looking_for_funds || '',
+    timeInBusiness: body.time_in_business || body.how_long_have_you_been_in_business || '',
+    monthlyRevenue: body.monthly_revenue || body.whats_your_current_monthly_revenue || '',
+    fundsUsedFor: body.funds_used_for || body.what_will_the_funds_be_used_for || '',
+    conductsBusiness: body.conducts_business || body.how_do_you_conduct_business || '',
+    campaignName: body.campaign_name || '',
+    formName: body.form_name || '',
   };
 
-  async function doLogin() {
-    const username = document.getElementById('login-user').value.trim();
-    const password = document.getElementById('login-pass').value;
-    if (!username || !password) return;
-    try {
-      const res = await fetch('/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password}) });
-      const data = await res.json();
-      if (!res.ok) { document.getElementById('login-error').textContent = data.error; return; }
-      token = data.token; currentAdmin = data;
-      localStorage.setItem('admin_token', token);
-      localStorage.setItem('admin_info', JSON.stringify(data));
-      showApp();
-    } catch(e) { document.getElementById('login-error').textContent = 'Connection error'; }
-  }
-  document.addEventListener('keydown', e => { if (e.key==='Enter' && document.getElementById('login-screen').style.display!=='none') doLogin(); });
+  leadData[lead.id] = lead;
 
-  function showApp() {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    document.getElementById('sidebar-username').textContent = currentAdmin.username;
-    if (currentAdmin.isSuperAdmin) document.getElementById('admins-nav').style.display = 'flex';
-    loadDashboard();
-  }
-  function logout() { localStorage.removeItem('admin_token'); localStorage.removeItem('admin_info'); location.reload(); }
-
-  async function api(path, options={}) {
-    const res = await fetch(path, { ...options, headers: {'x-admin-token':token,'Content-Type':'application/json',...(options.headers||{})} });
-    if (res.status===401) { logout(); return null; }
-    return res.json();
+  try {
+    await pool.query(`
+      INSERT INTO leads (id, lead_type, first_name, last_name, phone, email, company_name, state,
+        timezone, within_calling_hours, qualify_amount, timeline, time_in_business, monthly_revenue,
+        funds_used_for, conducts_business, campaign_name, form_name)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+    `, [lead.id, lead.leadType, lead.firstName, lead.lastName, lead.phone, lead.email,
+        lead.companyName, lead.state, lead.timezone, lead.withinCallingHours,
+        lead.qualifyAmount, lead.timeline, lead.timeInBusiness, lead.monthlyRevenue,
+        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName]);
+  } catch (err) {
+    console.error('DB insert error:', err);
   }
 
-  function showPage(name, el) {
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    document.getElementById('page-'+name).classList.add('active');
-    if (el) el.classList.add('active');
-    if (name==='leads') loadLeads();
-    if (name==='waiting') loadWaiting();
-    if (name==='admins') loadAdmins();
-    if (name==='reps') loadReps();
-  }
+  console.log(`New lead: ${lead.id} | ${leadType} | ${withinHours ? 'in hours' : 'OUTSIDE hours'} | ${tz}`);
+  broadcastAll({ type: 'new_lead', lead: { id: lead.id, leadType, withinCallingHours: withinHours, timezone: tz } });
+  res.json({ success: true, leadId: lead.id });
+});
 
-  // ── DASHBOARD ─────────────────────────────────────────────
-  async function loadDashboard() {
-    const from = document.getElementById('d-from').value;
-    const to = document.getElementById('d-to').value;
-    const qs = from&&to ? `?from=${from}&to=${to}T23:59:59` : '';
-    const data = await api('/admin/stats'+qs);
-    if (!data) return;
-    document.getElementById('s-total').textContent = data.totalLeads;
-    const claimed = data.byRep.reduce((s,r)=>s+parseInt(r.claimed),0);
-    const positive = data.byRep.reduce((s,r)=>s+parseInt(r.positive),0);
-    const vs = data.byRep.reduce((s,r)=>s+parseInt(r.vanillasoft),0);
-    const neg = data.byRep.reduce((s,r)=>s+parseInt(r.negative),0);
-    document.getElementById('s-claimed').textContent = claimed;
-    document.getElementById('s-positive').textContent = positive;
-    document.getElementById('s-vs').textContent = vs;
-    document.getElementById('s-neg').textContent = neg;
-    document.getElementById('s-wait').textContent = data.waitingCount;
-    const secs = data.avgResponseSeconds;
-    document.getElementById('s-resp').textContent = secs>60?`${Math.round(secs/60)}m`:`${secs}s`;
-    const lb = document.getElementById('rep-leaderboard');
-    if (data.byRep.length===0) { lb.innerHTML='<div class="empty-msg">No data yet</div>'; }
-    else {
-      lb.innerHTML = data.byRep.map((r,i)=>`
-        <div class="rep-row">
-          <div class="rep-rank ${i===0?'top':''}">${i+1}</div>
-          <div class="rep-avatar">${r.rep_name.substring(0,2).toUpperCase()}</div>
-          <div class="rep-name">${r.rep_name}</div>
-          <div class="rep-stats">
-            <div class="rep-stat"><div class="val">${r.claimed}</div><div class="lbl">Claimed</div></div>
-            <div class="rep-stat"><div class="val" style="color:#0F6E56">${r.positive}</div><div class="lbl">Positive</div></div>
-            <div class="rep-stat"><div class="val" style="color:#185FA5">${r.vanillasoft}</div><div class="lbl">VanillaSoft</div></div>
-            <div class="rep-stat"><div class="val" style="color:#993C1D">${r.negative}</div><div class="lbl">Negative</div></div>
-          </div>
-        </div>`).join('');
-    }
-    const dt = document.getElementById('disposition-table');
-    if (data.byDisposition.length===0) { dt.innerHTML='<tr><td colspan="2" class="empty-msg">No dispositions yet</td></tr>'; }
-    else { dt.innerHTML = data.byDisposition.map(d=>`<tr><td><span class="badge ${dBadge(d.disposition)}">${dispMap[d.disposition]||d.disposition}</span></td><td><strong>${d.count}</strong></td></tr>`).join(''); }
-  }
-  function clearDateFilter() { document.getElementById('d-from').value=''; document.getElementById('d-to').value=''; loadDashboard(); }
+// ── ADMIN AUTH ───────────────────────────────────────────────
+app.post('/admin/login', async (req, res) => {
+  const { username, password } = req.body;
+  const hash = hashPassword(password);
+  const result = await pool.query(
+    'SELECT * FROM admins WHERE username = $1 AND password_hash = $2',
+    [username, hash]
+  );
+  if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+  const admin = result.rows[0];
+  const token = generateToken();
+  await pool.query('INSERT INTO admin_sessions (token, admin_id) VALUES ($1, $2)', [token, admin.id]);
+  res.json({ token, username: admin.username, isSuperAdmin: admin.is_super_admin });
+});
 
-  // ── ALL LEADS ─────────────────────────────────────────────
-  async function loadLeads() {
-    const from=document.getElementById('l-from').value, to=document.getElementById('l-to').value;
-    const rep=document.getElementById('l-rep').value, disp=document.getElementById('l-disp').value;
-    let qs='?';
-    if(from&&to) qs+=`from=${from}&to=${to}T23:59:59&`;
-    if(rep) qs+=`rep=${encodeURIComponent(rep)}&`;
-    if(disp) qs+=`disposition=${disp}&`;
-    const data = await api('/admin/leads'+qs);
-    if(!data) return;
-    document.getElementById('leads-count').textContent=`${data.length} leads`;
-    const tb = document.getElementById('leads-table');
-    if(data.length===0) { tb.innerHTML='<tr><td colspan="11" class="empty-msg">No leads found</td></tr>'; return; }
-    tb.innerHTML = data.map(l=>`
-      <tr>
-        <td><button class="delete-btn" onclick="deleteLead('${l.id}')" title="Delete lead">🗑</button></td>
-        <td>${formatDate(l.received_at)}</td>
-        <td><span class="badge ${l.lead_type==='Working Capital'?'badge-vs':'badge-positive'}">${l.lead_type}</span></td>
-        <td>${l.first_name} ${l.last_name}</td>
-        <td>${formatPhone(l.phone)}</td>
-        <td>${l.company_name||'—'}</td>
-        <td>${l.state||'—'}</td>
-        <td>${l.qualify_amount||'—'}</td>
-        <td>${l.claimed_by||'<span class="badge badge-unclaimed">Unclaimed</span>'}</td>
-        <td>${l.disposition?`<span class="badge ${dBadge(l.disposition)}">${dispMap[l.disposition]||l.disposition}</span>`:'—'}</td>
-        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.notes||'—'}</td>
-      </tr>`).join('');
-  }
+app.get('/admin/admins', requireSuperAdmin, async (req, res) => {
+  const result = await pool.query('SELECT id, username, is_super_admin, created_at FROM admins ORDER BY created_at');
+  res.json(result.rows);
+});
 
-  async function deleteLead(id) {
-    if (!confirm('Delete this lead permanently? This cannot be undone.')) return;
-    const data = await api(`/admin/leads/${id}`, { method:'DELETE' });
-    if (data?.success) loadLeads();
+app.post('/admin/admins', requireSuperAdmin, async (req, res) => {
+  const { username, password, isSuperAdmin } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  try {
+    await pool.query(
+      'INSERT INTO admins (username, password_hash, is_super_admin) VALUES ($1, $2, $3)',
+      [username, hashPassword(password), isSuperAdmin || false]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: 'Username already exists' });
   }
+});
 
-  // ── MANUAL LEAD ───────────────────────────────────────────
-  async function addManualLead() {
-    const msg = document.getElementById('manual-msg');
-    const firstName = document.getElementById('m-fname').value.trim();
-    const lastName = document.getElementById('m-lname').value.trim();
-    const phone = document.getElementById('m-phone').value.trim();
-    if (!firstName || !lastName || !phone) { msg.className='form-msg error'; msg.textContent='First name, last name and phone are required'; return; }
-    const body = {
-      firstName, lastName, phone,
-      email: document.getElementById('m-email').value.trim(),
-      companyName: document.getElementById('m-company').value.trim(),
-      state: document.getElementById('m-state').value.trim(),
-      campaignName: document.getElementById('m-type').value,
-      qualifyAmount: document.getElementById('m-qualify').value.trim(),
-      timeline: document.getElementById('m-timeline').value.trim(),
-      timeInBusiness: document.getElementById('m-tib').value.trim(),
-      monthlyRevenue: document.getElementById('m-revenue').value.trim(),
-      fundsUsedFor: document.getElementById('m-funds').value.trim(),
-      conductsBusiness: document.getElementById('m-conducts').value.trim(),
-    };
-    const data = await api('/admin/leads/manual', { method:'POST', body:JSON.stringify(body) });
-    if (data?.success) {
-      msg.className='form-msg success'; msg.textContent='✅ Lead sent to all reps live!';
-      ['m-fname','m-lname','m-phone','m-email','m-company','m-state','m-qualify','m-timeline','m-tib','m-revenue','m-funds','m-conducts'].forEach(id => document.getElementById(id).value='');
-      setTimeout(() => msg.textContent='', 4000);
-    } else { msg.className='form-msg error'; msg.textContent = data?.error || 'Error sending lead'; }
-  }
+app.delete('/admin/admins/:id', requireSuperAdmin, async (req, res) => {
+  if (req.admin.id === parseInt(req.params.id)) return res.status(400).json({ error: 'Cannot delete yourself' });
+  await pool.query('DELETE FROM admins WHERE id = $1', [req.params.id]);
+  res.json({ success: true });
+});
 
-  // ── WAITING QUEUE ─────────────────────────────────────────
-  async function loadWaiting() {
-    const data = await api('/admin/waiting');
-    if (!data) return;
-    const tb = document.getElementById('waiting-table');
-    if (data.length===0) { tb.innerHTML='<tr><td colspan="4" class="empty-msg">No leads waiting</td></tr>'; return; }
-    tb.innerHTML = data.map(w=>{
-      const lead=w.lead_data;
-      const age=Math.floor((Date.now()-new Date(w.added_at).getTime())/60000);
-      const ageStr=age<60?`${age}m`:age<1440?`${Math.floor(age/60)}h`:`${Math.floor(age/1440)}d`;
-      return `<tr>
-        <td><span class="badge ${lead.leadType==='Working Capital'?'badge-vs':'badge-positive'}">${lead.leadType}</span></td>
-        <td>${tzLabel(lead.timezone)}</td>
-        <td>${formatDate(w.added_at)}</td>
-        <td><strong>${ageStr}</strong></td>
-      </tr>`;
-    }).join('');
-  }
+app.post('/admin/change-password', requireAdmin, async (req, res) => {
+  const { newPassword } = req.body;
+  await pool.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [hashPassword(newPassword), req.admin.id]);
+  res.json({ success: true });
+});
 
-  // ── MANAGE REPS ───────────────────────────────────────────
-  async function loadReps() {
-    const data = await api('/admin/reps');
-    if (!data) return;
-    const tb = document.getElementById('reps-table');
-    if (data.length===0) { tb.innerHTML='<tr><td colspan="5" class="empty-msg">No reps yet — invite one above</td></tr>'; return; }
-    tb.innerHTML = data.map(r=>`
-      <tr>
-        <td>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="rep-avatar" style="width:30px;height:30px;font-size:11px">
-              ${r.profile_pic ? `<img src="${r.profile_pic}" alt="${r.name}" />` : r.name.substring(0,2).toUpperCase()}
-            </div>
-            <strong>${r.name}</strong>
-          </div>
-        </td>
-        <td>${r.email}</td>
-        <td><span class="badge ${r.active?'badge-active':'badge-inactive'}">${r.active?'Active':'Inactive'}</span></td>
-        <td>${r.last_login ? formatDate(r.last_login) : '<span style="color:#aaa">Never</span>'}</td>
-        <td>
-          <div class="rep-actions">
-            <button class="btn btn-outline btn-sm" onclick="resendInvite(${r.id})">Resend Invite</button>
-            <button class="btn btn-outline btn-sm" onclick="resetRepPassword(${r.id}, '${r.name}')">Reset PW</button>
-            <button class="btn btn-warn btn-sm" onclick="resetCooldown(${r.id}, '${r.name}')">Reset Lock</button>
-            <button class="btn ${r.active?'btn-danger':'btn-primary'} btn-sm" onclick="toggleRep(${r.id})">${r.active?'Deactivate':'Activate'}</button>
-          </div>
-        </td>
-      </tr>`).join('');
-  }
+// ── ADMIN REP MANAGEMENT ─────────────────────────────────────
+app.get('/admin/reps', requireAdmin, async (req, res) => {
+  const result = await pool.query('SELECT id, name, email, active, profile_pic, invited_at, last_login FROM reps ORDER BY name');
+  res.json(result.rows);
+});
 
-  async function inviteRep() {
-    const name = document.getElementById('rep-name').value.trim();
-    const email = document.getElementById('rep-email').value.trim();
-    const msg = document.getElementById('invite-msg');
-    if (!name || !email) { msg.className='form-msg error'; msg.textContent='Name and email required'; return; }
-    const data = await api('/admin/reps/invite', { method:'POST', body:JSON.stringify({name,email}) });
-    if (!data) return;
-    if (data.error) { msg.className='form-msg error'; msg.textContent=data.error; return; }
-    msg.className='form-msg success'; msg.textContent=`✅ Invitation sent to ${email}`;
-    document.getElementById('rep-name').value=''; document.getElementById('rep-email').value='';
-    loadReps();
-  }
-
-  async function resendInvite(id) {
-    const data = await api(`/admin/reps/${id}/resend-invite`, { method:'POST' });
-    if (data?.success) alert('Invitation resent!');
-  }
-
-  async function resetRepPassword(id, name) {
-    const pw = prompt(`Set new password for ${name}:`);
-    if (!pw) return;
-    if (pw.length < 6) { alert('Password must be at least 6 characters'); return; }
-    const data = await api(`/admin/reps/${id}/reset-password`, { method:'POST', body:JSON.stringify({newPassword:pw}) });
-    if (data?.success) alert(`Password updated for ${name}. They will need to log in again.`);
-  }
-
-  async function resetCooldown(id, name) {
-    if (!confirm(`Reset active lead lock and cooldown for ${name}?`)) return;
-    const data = await api(`/admin/reps/${id}/reset-cooldown`, { method:'POST' });
-    if (data?.success) alert(`${name}'s lock has been cleared — they can claim again immediately.`);
-  }
-
-  async function toggleRep(id) {
-    const data = await api(`/admin/reps/${id}/toggle`, { method:'PATCH' });
-    if (data) loadReps();
-  }
-
-  // ── MANAGE ADMINS ─────────────────────────────────────────
-  async function loadAdmins() {
-    const data = await api('/admin/admins');
-    if (!data) return;
-    const list = document.getElementById('admin-list');
-    list.innerHTML = data.map(a=>`
-      <div class="admin-item">
-        <div class="rep-avatar">${a.username.substring(0,2).toUpperCase()}</div>
-        <div class="admin-item-info">
-          <div class="admin-item-name">${a.username}${a.is_super_admin?'<span class="super-badge">Super Admin</span>':''}</div>
-          <div class="admin-item-sub">Added ${formatDate(a.created_at)}</div>
+app.post('/admin/reps/invite', requireAdmin, async (req, res) => {
+  const { name, email } = req.body;
+  if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
+  try {
+    const repResult = await pool.query(
+      'INSERT INTO reps (name, email) VALUES ($1, $2) RETURNING id',
+      [name, email.toLowerCase()]
+    );
+    const repId = repResult.rows[0].id;
+    const token = generateToken();
+    await pool.query('INSERT INTO rep_invites (token, rep_id) VALUES ($1, $2)', [token, repId]);
+    const baseUrl = process.env.APP_URL || 'https://lead-claim-server-production.up.railway.app';
+    const inviteUrl = `${baseUrl}/invite.html?token=${token}`;
+    const html = `
+      <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h1 style="color: #1D9E75; font-size: 28px; margin: 0;">⚡ Voltlead</h1>
+          <p style="color: #888; margin-top: 4px;">Real-time Lead Claiming</p>
         </div>
-        ${!a.is_super_admin?`<button class="btn btn-danger btn-sm" onclick="deleteAdmin(${a.id},'${a.username}')">Remove</button>`:'<span style="font-size:12px;color:#aaa">You</span>'}
-      </div>`).join('');
+        <div style="background: #f9f9f9; border-radius: 12px; padding: 32px;">
+          <h2 style="margin: 0 0 12px; font-size: 20px;">You're invited, ${name}!</h2>
+          <p style="color: #555; line-height: 1.6;">You've been added to the Voltlead lead claiming platform. Click the button below to set your password and get started.</p>
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${inviteUrl}" style="background: #1D9E75; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block;">Accept Invitation</a>
+          </div>
+          <p style="color: #aaa; font-size: 13px; text-align: center;">This link expires in 7 days. If you didn't expect this email, you can ignore it.</p>
+        </div>
+      </div>
+    `;
+    await sendEmail(email, 'You\'re invited to Voltlead', html);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'A rep with this email already exists' });
+    res.status(500).json({ error: 'Failed to create invitation' });
+  }
+});
+
+app.post('/admin/reps/:id/resend-invite', requireAdmin, async (req, res) => {
+  const rep = await pool.query('SELECT * FROM reps WHERE id = $1', [req.params.id]);
+  if (rep.rows.length === 0) return res.status(404).json({ error: 'Rep not found' });
+  const token = generateToken();
+  await pool.query('UPDATE rep_invites SET used = TRUE WHERE rep_id = $1', [req.params.id]);
+  await pool.query('INSERT INTO rep_invites (token, rep_id) VALUES ($1, $2)', [token, req.params.id]);
+  const baseUrl = process.env.APP_URL || 'https://lead-claim-server-production.up.railway.app';
+  const inviteUrl = `${baseUrl}/invite.html?token=${token}`;
+  const html = `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:40px 20px;"><h1 style="color:#1D9E75;">⚡ Voltlead</h1><p>Hi ${rep.rows[0].name},</p><p>Here's your new invitation link to access Voltlead:</p><div style="text-align:center;margin:32px 0;"><a href="${inviteUrl}" style="background:#1D9E75;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;">Set Password</a></div><p style="color:#aaa;font-size:13px;">This link expires in 7 days.</p></div>`;
+  await sendEmail(rep.rows[0].email, 'Your Voltlead invitation', html);
+  res.json({ success: true });
+});
+
+app.patch('/admin/reps/:id/toggle', requireAdmin, async (req, res) => {
+  const result = await pool.query('UPDATE reps SET active = NOT active WHERE id = $1 RETURNING active', [req.params.id]);
+  res.json({ active: result.rows[0].active });
+});
+
+app.post('/admin/reps/:id/reset-password', requireAdmin, async (req, res) => {
+  const { newPassword } = req.body;
+  if (!newPassword) return res.status(400).json({ error: 'Password required' });
+  await pool.query('UPDATE reps SET password_hash = $1 WHERE id = $2', [hashPassword(newPassword), req.params.id]);
+  await pool.query('DELETE FROM rep_sessions WHERE rep_id = $1', [req.params.id]);
+  res.json({ success: true });
+});
+
+app.post('/admin/reps/:id/reset-cooldown', requireAdmin, async (req, res) => {
+  const rep = await pool.query('SELECT name FROM reps WHERE id = $1', [req.params.id]);
+  if (rep.rows.length === 0) return res.status(404).json({ error: 'Rep not found' });
+  const name = rep.rows[0].name;
+  delete repCooldowns[name];
+  delete repActiveLeads[name];
+  res.json({ success: true });
+});
+
+// ── ADMIN REPORTING ──────────────────────────────────────────
+app.get('/admin/stats', requireAdmin, async (req, res) => {
+  const { from, to } = req.query;
+  const dateFilter = from && to ? `AND l.received_at BETWEEN '${from}' AND '${to}'` : '';
+  const [totals, byRep, byDisposition, byLeadType, avgResponse, waiting] = await Promise.all([
+    pool.query(`SELECT COUNT(*) as total_leads FROM leads l WHERE 1=1 ${dateFilter}`),
+    pool.query(`
+      SELECT e.rep_name,
+        COUNT(DISTINCT CASE WHEN e.event_type = 'claimed' THEN e.lead_id END) as claimed,
+        COUNT(DISTINCT CASE WHEN e.event_type = 'disposed' THEN e.lead_id END) as disposed,
+        COUNT(DISTINCT CASE WHEN e.disposition IN ('imn_app_taken','imn_app_sent') THEN e.lead_id END) as positive,
+        COUNT(DISTINCT CASE WHEN e.disposition IN ('left_message','no_answer','in_market_later') THEN e.lead_id END) as vanillasoft,
+        COUNT(DISTINCT CASE WHEN e.disposition IN ('not_qualified','not_interested','wrong_number') THEN e.lead_id END) as negative
+      FROM lead_events e
+      JOIN leads l ON e.lead_id = l.id
+      WHERE e.event_type IN ('claimed','disposed') ${dateFilter.replace('l.received_at','l.received_at')}
+      GROUP BY e.rep_name ORDER BY claimed DESC
+    `),
+    pool.query(`
+      SELECT e.disposition, COUNT(*) as count FROM lead_events e
+      JOIN leads l ON e.lead_id = l.id
+      WHERE e.event_type = 'disposed' ${dateFilter}
+      GROUP BY e.disposition ORDER BY count DESC
+    `),
+    pool.query(`SELECT l.lead_type, COUNT(*) as count FROM leads l WHERE 1=1 ${dateFilter} GROUP BY l.lead_type`),
+    pool.query(`
+      SELECT AVG(EXTRACT(EPOCH FROM (claim.created_at - l.received_at))) as avg_seconds
+      FROM lead_events claim JOIN leads l ON claim.lead_id = l.id
+      WHERE claim.event_type = 'claimed' ${dateFilter}
+    `),
+    pool.query('SELECT COUNT(*) as count FROM waiting_queue'),
+  ]);
+  res.json({
+    totalLeads: parseInt(totals.rows[0].total_leads),
+    byRep: byRep.rows,
+    byDisposition: byDisposition.rows,
+    byLeadType: byLeadType.rows,
+    avgResponseSeconds: Math.round(avgResponse.rows[0].avg_seconds || 0),
+    waitingCount: parseInt(waiting.rows[0].count),
+  });
+});
+
+app.get('/admin/leads', requireAdmin, async (req, res) => {
+  const { from, to, rep, disposition } = req.query;
+  let where = 'WHERE 1=1';
+  const params = [];
+  if (from && to) { params.push(from, to); where += ` AND l.received_at BETWEEN $${params.length-1} AND $${params.length}`; }
+  if (rep) { params.push(rep); where += ` AND claim_event.rep_name = $${params.length}`; }
+  if (disposition) { params.push(disposition); where += ` AND dispose_event.disposition = $${params.length}`; }
+  const result = await pool.query(`
+    SELECT l.*,
+      claim_event.rep_name as claimed_by, claim_event.created_at as claimed_at,
+      dispose_event.disposition, dispose_event.notes, dispose_event.created_at as disposed_at
+    FROM leads l
+    LEFT JOIN lead_events claim_event ON l.id = claim_event.lead_id AND claim_event.event_type = 'claimed'
+    LEFT JOIN lead_events dispose_event ON l.id = dispose_event.lead_id AND dispose_event.event_type = 'disposed'
+    ${where} ORDER BY l.received_at DESC LIMIT 500
+  `, params);
+  res.json(result.rows);
+});
+
+// Delete lead
+app.delete('/admin/leads/:id', requireAdmin, async (req, res) => {
+  await pool.query('DELETE FROM lead_events WHERE lead_id = $1', [req.params.id]);
+  await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [req.params.id]);
+  await pool.query('DELETE FROM leads WHERE id = $1', [req.params.id]);
+  delete leadData[req.params.id];
+  res.json({ success: true });
+});
+
+// Manual lead addition
+app.post('/admin/leads/manual', requireAdmin, async (req, res) => {
+  const body = req.body;
+  const phone = body.phone || '';
+  const campaignName = (body.campaignName || '').toLowerCase();
+  const leadType = campaignName.includes('equipment') ? 'Equipment Financing' : 'Working Capital';
+  const tz = getTimezoneForPhone(phone);
+  const withinHours = isWithinCallingHours(phone);
+
+  const lead = {
+    id: `lead_${Date.now()}`,
+    receivedAt: new Date().toISOString(),
+    leadType, timezone: tz, withinCallingHours: withinHours,
+    firstName: body.firstName || '',
+    lastName: body.lastName || '',
+    phone,
+    email: body.email || '',
+    companyName: body.companyName || '',
+    state: body.state || '',
+    qualifyAmount: body.qualifyAmount || '',
+    timeline: body.timeline || '',
+    timeInBusiness: body.timeInBusiness || '',
+    monthlyRevenue: body.monthlyRevenue || '',
+    fundsUsedFor: body.fundsUsedFor || '',
+    conductsBusiness: body.conductsBusiness || '',
+    campaignName: body.campaignName || 'Manual Entry',
+    formName: 'Admin Manual',
+  };
+
+  leadData[lead.id] = lead;
+  try {
+    await pool.query(`
+      INSERT INTO leads (id, lead_type, first_name, last_name, phone, email, company_name, state,
+        timezone, within_calling_hours, qualify_amount, timeline, time_in_business, monthly_revenue,
+        funds_used_for, conducts_business, campaign_name, form_name)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+    `, [lead.id, lead.leadType, lead.firstName, lead.lastName, lead.phone, lead.email,
+        lead.companyName, lead.state, lead.timezone, lead.withinCallingHours,
+        lead.qualifyAmount, lead.timeline, lead.timeInBusiness, lead.monthlyRevenue,
+        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName]);
+  } catch (err) {
+    console.error('DB insert error:', err);
   }
 
-  async function addAdmin() {
-    const username=document.getElementById('new-username').value.trim();
-    const password=document.getElementById('new-password').value;
-    const isSuperAdmin=document.getElementById('new-super').checked;
-    const msg=document.getElementById('add-admin-msg');
-    if(!username||!password){msg.className='form-msg error';msg.textContent='Username and password required';return;}
-    const data=await api('/admin/admins',{method:'POST',body:JSON.stringify({username,password,isSuperAdmin})});
-    if(!data) return;
-    if(data.error){msg.className='form-msg error';msg.textContent=data.error;return;}
-    msg.className='form-msg success';msg.textContent=`Admin "${username}" added`;
-    document.getElementById('new-username').value='';document.getElementById('new-password').value='';
-    loadAdmins();
-  }
+  broadcastAll({ type: 'new_lead', lead: { id: lead.id, leadType, withinCallingHours: withinHours, timezone: tz } });
+  res.json({ success: true, leadId: lead.id });
+});
 
-  async function deleteAdmin(id, username) {
-    if(!confirm(`Remove admin "${username}"?`)) return;
-    await api(`/admin/admins/${id}`,{method:'DELETE'});
-    loadAdmins();
-  }
+app.get('/admin/export', requireAdmin, async (req, res) => {
+  const { from, to } = req.query;
+  const dateFilter = from && to ? `AND l.received_at BETWEEN '${from}' AND '${to}'` : '';
+  const result = await pool.query(`
+    SELECT l.received_at, l.lead_type, l.first_name, l.last_name, l.phone, l.email,
+      l.company_name, l.state, l.timezone, l.qualify_amount, l.timeline,
+      l.time_in_business, l.monthly_revenue, l.funds_used_for,
+      claim_event.rep_name as claimed_by, claim_event.created_at as claimed_at,
+      dispose_event.disposition, dispose_event.notes, dispose_event.created_at as disposed_at
+    FROM leads l
+    LEFT JOIN lead_events claim_event ON l.id = claim_event.lead_id AND claim_event.event_type = 'claimed'
+    LEFT JOIN lead_events dispose_event ON l.id = dispose_event.lead_id AND dispose_event.event_type = 'disposed'
+    WHERE 1=1 ${dateFilter} ORDER BY l.received_at DESC
+  `);
+  const headers = ['Received','Lead Type','First Name','Last Name','Phone','Email','Company','State','Timezone',
+    'Qualify Amount','Timeline','Time in Business','Monthly Revenue','Funds Used For',
+    'Claimed By','Claimed At','Disposition','Notes','Disposed At'];
+  const rows = result.rows.map(r => [
+    r.received_at, r.lead_type, r.first_name, r.last_name, r.phone, r.email,
+    r.company_name, r.state, r.timezone, r.qualify_amount, r.timeline,
+    r.time_in_business, r.monthly_revenue, r.funds_used_for,
+    r.claimed_by, r.claimed_at, r.disposition, r.notes, r.disposed_at
+  ].map(v => `"${(v||'').toString().replace(/"/g,'""')}"`).join(','));
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=voltlead-leads.csv');
+  res.send([headers.join(','), ...rows].join('\n'));
+});
 
-  async function changePassword() {
-    const pw=document.getElementById('new-pw').value;
-    const conf=document.getElementById('confirm-pw').value;
-    const msg=document.getElementById('pw-msg');
-    if(!pw){msg.className='form-msg error';msg.textContent='Enter a new password';return;}
-    if(pw!==conf){msg.className='form-msg error';msg.textContent='Passwords do not match';return;}
-    const data=await api('/admin/change-password',{method:'POST',body:JSON.stringify({newPassword:pw})});
-    if(!data) return;
-    msg.className='form-msg success';msg.textContent='Password updated';
-    document.getElementById('new-pw').value='';document.getElementById('confirm-pw').value='';
-  }
+app.get('/admin/waiting', requireAdmin, async (req, res) => {
+  const result = await pool.query('SELECT * FROM waiting_queue ORDER BY added_at ASC');
+  res.json(result.rows);
+});
 
-  // ── CSV EXPORT ────────────────────────────────────────────
-  function exportCSV() {
-    const from=document.getElementById('d-from')?.value||document.getElementById('l-from')?.value||'';
-    const to=document.getElementById('d-to')?.value||document.getElementById('l-to')?.value||'';
-    let url='/admin/export';
-    if(from&&to) url+=`?from=${from}&to=${to}T23:59:59`;
-    fetch(url,{headers:{'x-admin-token':token}}).then(r=>r.blob()).then(blob=>{
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(blob);
-      a.download=`voltlead-${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-    });
-  }
+// One-time admin password reset — remove after use
+app.get('/reset-admin-password', async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== 'voltlead-reset-2024') return res.status(403).json({ error: 'Forbidden' });
+  const hash = hashPassword('changeme123');
+  await pool.query('UPDATE admins SET password_hash = $1 WHERE username = $2', [hash, 'admin']);
+  res.json({ success: true, message: 'Admin password reset to changeme123' });
+});
 
-  // ── HELPERS ───────────────────────────────────────────────
-  function formatDate(dt) {
-    if(!dt) return '—';
-    return new Date(dt).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+// ── ADMIN SWITCH TO REP ──────────────────────────────────────
+app.post('/admin/switch-to-rep', requireAdmin, async (req, res) => {
+  const admin = req.admin;
+  // Check if admin already has a linked rep account
+  let repResult = await pool.query('SELECT * FROM reps WHERE email = $1', [admin.username + '@admin.voltlead']);
+  let repId;
+  if (repResult.rows.length === 0) {
+    // Create a rep account for this admin automatically
+    const insertResult = await pool.query(
+      'INSERT INTO reps (name, email, password_hash, active) VALUES ($1, $2, $3, TRUE) RETURNING id',
+      [admin.username, admin.username + '@admin.voltlead', 'admin-linked-account']
+    );
+    repId = insertResult.rows[0].id;
+  } else {
+    repId = repResult.rows[0].id;
+    // Make sure it's active
+    await pool.query('UPDATE reps SET active = TRUE WHERE id = $1', [repId]);
   }
-  function formatPhone(phone) {
-    const c=(phone||'').replace(/\D/g,'');
-    const d=c.startsWith('1')?c.slice(1):c;
-    const m=d.match(/^(\d{3})(\d{3})(\d{4})$/);
-    return m?`(${m[1]}) ${m[2]}-${m[3]}`:phone;
-  }
-  function tzLabel(tz) {
-    const map={'America/New_York':'Eastern','America/Chicago':'Central','America/Denver':'Mountain','America/Los_Angeles':'Pacific','America/Phoenix':'Arizona','Pacific/Honolulu':'Hawaii','America/Anchorage':'Alaska'};
-    return map[tz]||tz;
-  }
-  function dBadge(d) {
-    if(['imn_app_taken','imn_app_sent'].includes(d)) return 'badge-positive';
-    if(['left_message','no_answer','in_market_later'].includes(d)) return 'badge-vs';
-    return 'badge-negative';
-  }
+  // Create a short-lived one-time token (5 minutes)
+  const token = generateToken();
+  await pool.query(
+    'INSERT INTO rep_sessions (token, rep_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')',
+    [token, repId]
+  );
+  res.json({ token, repName: admin.username });
+});
 
-  // ── SWITCH TO CLAIMER ────────────────────────────────────
-  async function switchToClaimer() {
-    try {
-      const res = await fetch('/admin/switch-to-rep', {
-        method: 'POST',
-        headers: { 'x-admin-token': token, 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (!res.ok) { alert('Error: ' + data.error); return; }
-      // Open rep dashboard with auto-login token
-      const url = `/?switch_token=${data.token}&switch_name=${encodeURIComponent(data.repName)}&admin_mode=1`;
-      window.open(url, '_blank');
-    } catch(e) {
-      alert('Connection error — please try again');
-    }
-  }
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', connected: clients.size, leads: Object.keys(leadData).length });
+});
 
-  // ── INIT ──────────────────────────────────────────────────
-  if (token) {
-    fetch('/admin/stats',{headers:{'x-admin-token':token}})
-      .then(r=>{if(r.ok) showApp(); else localStorage.removeItem('admin_token');})
-      .catch(()=>{});
+function broadcastAll(data) {
+  const payload = JSON.stringify(data);
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) client.send(payload);
   }
-</script>
-</body>
-</html>
+}
+
+const PORT = process.env.PORT || 3000;
+initDB().then(() => {
+  server.listen(PORT, () => console.log(`Voltlead server on port ${PORT}`));
+}).catch(err => {
+  console.error('DB init failed:', err);
+  process.exit(1);
+});
