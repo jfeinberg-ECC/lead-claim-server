@@ -370,27 +370,25 @@ wss.on('connection', (ws) => {
           claimedLeads[leadId] = repName;
           repCooldowns[repName] = now;
           repActiveLeads[repName] = leadId;
-          // Get lead from memory or fetch from DB if not in memory
+          // Always fetch full lead from DB to ensure complete data
           let lead = leadData[leadId];
-          if (!lead) {
-            try {
-              const result = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
-              if (result.rows.length > 0) {
-                const r = result.rows[0];
-                lead = {
-                  id: r.id, leadType: r.lead_type, timezone: r.timezone,
-                  withinCallingHours: r.within_calling_hours,
-                  firstName: r.first_name, lastName: r.last_name,
-                  phone: r.phone, email: r.email, companyName: r.company_name,
-                  state: r.state, qualifyAmount: r.qualify_amount,
-                  timeline: r.timeline, timeInBusiness: r.time_in_business,
-                  monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
-                  conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
-                };
-                leadData[leadId] = lead; // Cache it
-              }
-            } catch(e) { console.error('Lead fetch error:', e); }
-          }
+          try {
+            const result = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+            if (result.rows.length > 0) {
+              const r = result.rows[0];
+              lead = {
+                id: r.id, leadType: r.lead_type, timezone: r.timezone,
+                withinCallingHours: r.within_calling_hours,
+                firstName: r.first_name, lastName: r.last_name,
+                phone: r.phone, email: r.email, companyName: r.company_name,
+                state: r.state, qualifyAmount: r.qualify_amount,
+                timeline: r.timeline, timeInBusiness: r.time_in_business,
+                monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
+                conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
+              };
+              leadData[leadId] = lead;
+            }
+          } catch(e) { console.error('Lead fetch error:', e); }
           ws.send(JSON.stringify({ type: 'claim_success', leadId, lead }));
           broadcastAll({ type: 'lead_claimed', leadId, claimedBy: repName });
           await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [leadId]);
@@ -418,7 +416,10 @@ wss.on('connection', (ws) => {
         const lead = leadData[leadId] || {};
         handleDisposition({ lead, disposition, notes, repName });
         if (repActiveLeads[repName] === leadId) delete repActiveLeads[repName];
+        // Always remove from waiting queue on dispose
+        await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [leadId]);
         broadcastAll({ type: 'lead_disposed', leadId, disposition, claimedBy: repName });
+        broadcastAll({ type: 'lead_claimed', leadId, claimedBy: repName }); // ensure queue UI updates
         await pool.query(
           'INSERT INTO lead_events (lead_id, event_type, rep_name, disposition, notes) VALUES ($1, $2, $3, $4, $5)',
           [leadId, 'disposed', repName, disposition, notes]
