@@ -814,6 +814,23 @@ app.get('/reset-admin-password', async (req, res) => {
   res.json({ success: true, message: 'Admin password reset to changeme123' });
 });
 
+// ── REP RECENT LEADS ─────────────────────────────────────────
+app.get('/rep/recent-leads', requireRep, async (req, res) => {
+  const repName = req.rep.name;
+  const result = await pool.query(`
+    SELECT l.*,
+      e_claim.created_at as claimed_at,
+      e_dispose.disposition, e_dispose.notes, e_dispose.created_at as disposed_at
+    FROM leads l
+    JOIN lead_events e_claim ON l.id = e_claim.lead_id AND e_claim.event_type = 'claimed' AND e_claim.rep_name = $1
+    LEFT JOIN lead_events e_dispose ON l.id = e_dispose.lead_id AND e_dispose.event_type = 'disposed'
+    WHERE l.received_at > NOW() - INTERVAL '30 days'
+    ORDER BY e_claim.created_at DESC
+    LIMIT 100
+  `, [repName]);
+  res.json(result.rows);
+});
+
 // ── ADMIN SWITCH TO REP ──────────────────────────────────────
 app.post('/admin/switch-to-rep', requireAdmin, async (req, res) => {
   const admin = req.admin;
