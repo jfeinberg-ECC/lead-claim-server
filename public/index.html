@@ -831,6 +831,11 @@
       }
       if (msg.type === 'lead_claimed') {
         teamTotal++; removeFromWaiting(msg.leadId); updateStats(); saveState();
+        // If the popup is showing this lead and someone else claimed it, disable pass
+        if (currentLeadId === msg.leadId && msg.claimedBy !== repName) {
+          const passBtn = document.querySelector('.popup-pass');
+          if (passBtn) { passBtn.style.display = 'none'; }
+        }
       }
 
       if (msg.type === 'lead_timeout_warning' && msg.repName === repName) {
