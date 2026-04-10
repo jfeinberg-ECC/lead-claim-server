@@ -131,6 +131,24 @@ async function initDB() {
   await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS first_name TEXT").catch(()=>{});
   await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS last_name TEXT").catch(()=>{});
   await pool.query("ALTER TABLE admins ADD COLUMN IF NOT EXISTS linked_rep_id INTEGER").catch(()=>{});
+  // Restore claimed leads from DB into memory to prevent double claims after restart
+  const recentClaims = await pool.query(`
+    SELECT DISTINCT ON (e.lead_id) e.lead_id, e.rep_name
+    FROM lead_events e
+    WHERE e.event_type = 'claimed'
+    AND e.created_at > NOW() - INTERVAL '2 hours'
+    AND NOT EXISTS (
+      SELECT 1 FROM lead_events d
+      WHERE d.lead_id = e.lead_id AND d.event_type IN ('disposed','timeout','passed')
+      AND d.created_at > e.created_at
+    )
+    ORDER BY e.lead_id, e.created_at DESC
+  `);
+  recentClaims.rows.forEach(row => {
+    claimedLeads[row.lead_id] = row.rep_name;
+    repActiveLeads[row.rep_name] = row.lead_id;
+    console.log(`Restored claim: ${row.lead_id} → ${row.rep_name}`);
+  });
   console.log('Database initialized');
 }
 
@@ -357,15 +375,25 @@ wss.on('connection', (ws) => {
         } else if (now - lastClaim < COOLDOWN_MS) {
           ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'cooldown', secondsLeft, leadId }));
         } else {
-          // Check calling hours — block claim if outside hours
+          // Check calling hours
           const leadInfo = leadData[leadId];
           if (leadInfo && leadInfo.withinCallingHours === false) {
-            // Re-check calling hours in real time
             const stillOutside = !isWithinCallingHours(leadInfo.phone || '');
             if (stillOutside) {
               ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'outside_hours', leadId }));
               return;
             }
+          }
+          // DB-level atomic lock — prevents double claims after server restart
+          const existingClaim = await pool.query(
+            `SELECT rep_name FROM lead_events WHERE lead_id = $1 AND event_type = 'claimed' LIMIT 1`,
+            [leadId]
+          );
+          if (existingClaim.rows.length > 0) {
+            const claimedBy = existingClaim.rows[0].rep_name;
+            claimedLeads[leadId] = claimedBy; // Restore memory
+            ws.send(JSON.stringify({ type: 'claim_failed', leadId, claimedBy }));
+            return;
           }
           claimedLeads[leadId] = repName;
           repCooldowns[repName] = now;
