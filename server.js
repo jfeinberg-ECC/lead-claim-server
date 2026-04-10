@@ -1089,6 +1089,7 @@ app.get('/rep/recent-leads', requireRep, async (req, res) => {
     AND e_claim.rep_name = ANY($1)
     ORDER BY l.id, e_claim.created_at DESC
   `, [possibleNames]);
+  // Sort: undisposed first (most recent claim), then disposed (most recent first)
   res.json(result.rows);
 });
 
