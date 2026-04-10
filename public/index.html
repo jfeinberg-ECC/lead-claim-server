@@ -1104,7 +1104,14 @@
         </div>
       </div>
     `;
-    document.getElementById('lead-cards').insertBefore(card, document.getElementById('lead-cards').firstChild);
+    const leadCardsEl = document.getElementById('lead-cards');
+    // Active leads go to top, disposed go to bottom
+    const firstDisposed = leadCardsEl.querySelector('.lead-card.collapsed');
+    if (firstDisposed) {
+      leadCardsEl.insertBefore(card, firstDisposed);
+    } else {
+      leadCardsEl.insertBefore(card, leadCardsEl.firstChild);
+    }
   }
 
   function field(label, val) {
@@ -1165,6 +1172,11 @@
       banner.className = 'disposed-banner disposed-' + disposedGroup(disposition);
       banner.textContent = disposedLabel(disposition);
       card.appendChild(banner);
+    }
+    // Move disposed card to bottom of lead list
+    const leadCardsEl = document.getElementById('lead-cards');
+    if (leadCardsEl && card.parentNode === leadCardsEl) {
+      leadCardsEl.appendChild(card);
     }
   }
 
