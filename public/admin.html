@@ -255,6 +255,23 @@
           <div class="form-group"><label>Funds Used For</label><input type="text" id="m-funds" placeholder="Equipment purchase" /></div>
         </div>
         <div class="form-group" style="margin-bottom:14px"><label>Conducts Business</label><input type="text" id="m-conducts" placeholder="Storefront, online, etc." /></div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Lead Source</label>
+          <select id="m-source" style="width:100%;padding:9px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px">
+            <option value="Manual">Manual Entry</option>
+            <option value="Facebook">Facebook</option>
+            <option value="Google">Google</option>
+            <option value="TikTok">TikTok</option>
+            <option value="Cold Call">Cold Call</option>
+            <option value="Referral">Referral</option>
+            <option value="Website">Website</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Custom Fields <span style="color:#aaa;font-weight:400">(optional — one per line, format: Field Name: Value)</span></label>
+          <textarea id="m-custom" placeholder="Credit Score: 680&#10;Annual Revenue: $500,000&#10;Industry: Restaurant" style="width:100%;padding:9px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;min-height:80px;font-family:inherit;resize:vertical;outline:none"></textarea>
+        </div>
         <button class="btn btn-primary" onclick="addManualLead()" style="min-width:160px">🚀 Send to Reps Live</button>
         <div class="form-msg" id="manual-msg"></div>
       </div>
@@ -458,6 +475,7 @@
         <td>${l.state||'—'}</td>
         <td>${l.qualify_amount||'—'}</td>
         <td>${l.claimed_by||'<span class="badge badge-unclaimed">Unclaimed</span>'}</td>
+        <td><span class="badge" style="background:#f0f0f0;color:#666">${l.lead_source||'Facebook'}</span></td>
         <td>${l.disposition?`<span class="badge ${dBadge(l.disposition)}">${dispMap[l.disposition]||l.disposition}</span>`:'—'}</td>
         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.notes||'—'}</td>
       </tr>`).join('');
@@ -476,6 +494,17 @@
     const lastName = document.getElementById('m-lname').value.trim();
     const phone = document.getElementById('m-phone').value.trim();
     if (!firstName || !lastName || !phone) { msg.className='form-msg error'; msg.textContent='First name, last name and phone are required'; return; }
+    // Parse custom fields from textarea
+    const customFieldsRaw = document.getElementById('m-custom').value.trim();
+    const customFields = {};
+    customFieldsRaw.split('\n').forEach(line => {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx > 0) {
+        const key = line.substring(0, colonIdx).trim();
+        const val = line.substring(colonIdx + 1).trim();
+        if (key && val) customFields[key] = val;
+      }
+    });
     const body = {
       firstName, lastName, phone,
       email: document.getElementById('m-email').value.trim(),
@@ -488,11 +517,14 @@
       monthlyRevenue: document.getElementById('m-revenue').value.trim(),
       fundsUsedFor: document.getElementById('m-funds').value.trim(),
       conductsBusiness: document.getElementById('m-conducts').value.trim(),
+      leadSource: document.getElementById('m-source').value,
+      customFields,
     };
     const data = await api('/admin/leads/manual', { method:'POST', body:JSON.stringify(body) });
     if (data?.success) {
       msg.className='form-msg success'; msg.textContent='✅ Lead sent to all reps live!';
-      ['m-fname','m-lname','m-phone','m-email','m-company','m-state','m-qualify','m-timeline','m-tib','m-revenue','m-funds','m-conducts'].forEach(id => document.getElementById(id).value='');
+      ['m-fname','m-lname','m-phone','m-email','m-company','m-state','m-qualify','m-timeline','m-tib','m-revenue','m-funds','m-conducts','m-custom'].forEach(id => document.getElementById(id).value='');
+      document.getElementById('m-source').value = 'Manual';
       setTimeout(() => msg.textContent='', 4000);
     } else { msg.className='form-msg error'; msg.textContent = data?.error || 'Error sending lead'; }
   }
