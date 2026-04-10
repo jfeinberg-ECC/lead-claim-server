@@ -345,11 +345,24 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'pass') {
         const { leadId, lead } = msg;
+        // Release active lead lock for this rep
+        if (msg.repName && repActiveLeads[msg.repName] === leadId) {
+          delete repActiveLeads[msg.repName];
+        }
         await addToWaitingQueue(leadId, lead);
         await pool.query(
           'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
           [leadId, 'passed', msg.repName || 'unknown']
         );
+      }
+
+      if (msg.type === 'release_lock') {
+        // Client explicitly releasing a stuck lock
+        const { repName } = msg;
+        if (repName) {
+          delete repActiveLeads[repName];
+          console.log(`Lock released for ${repName}`);
+        }
       }
 
       if (msg.type === 'expire') {
