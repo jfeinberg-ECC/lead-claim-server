@@ -1279,6 +1279,16 @@
 
       if (leads.length === 0) { updateStats(); return; }
 
+      // Sort: undisposed leads first, disposed leads after
+      leads.sort((a, b) => {
+        const aActive = !a.disposition;
+        const bActive = !b.disposition;
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        // Within same group, most recently claimed first
+        return new Date(b.claimed_at) - new Date(a.claimed_at);
+      });
+
       leads.forEach(l => {
         const lead = {
           id: l.id, leadType: l.lead_type, timezone: l.timezone,
