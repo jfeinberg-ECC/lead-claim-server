@@ -491,6 +491,7 @@ wss.on('connection', (ws) => {
                     SELECT 1 FROM lead_events d
                     WHERE d.lead_id = e.lead_id 
                     AND d.event_type IN ('disposed', 'timeout', 'passed')
+                    AND d.created_at > e.created_at
                   )
                   AND NOT EXISTS (
                     SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = e.lead_id
