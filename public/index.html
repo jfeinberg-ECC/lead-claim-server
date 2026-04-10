@@ -615,7 +615,7 @@
     ws.onopen = () => {
       setConn(true);
       // Ask server for authoritative state — never trust localStorage alone
-      if (repName) ws.send(JSON.stringify({ type: 'rep_init', repName }));
+      if (repName) ws.send(JSON.stringify({ type: 'rep_init', repName, repToken }));
     };
     ws.onclose = () => { setConn(false); setTimeout(connectWS, 3000); };
     ws.onerror = () => ws.close();
@@ -852,7 +852,7 @@
 
   function claimLead() {
     if (!currentLeadId || !ws || hasActiveLead || onCooldown) return;
-    ws.send(JSON.stringify({ type: 'claim', leadId: currentLeadId, repName }));
+    ws.send(JSON.stringify({ type: 'claim', leadId: currentLeadId, repName, repToken }));
     const btn = document.getElementById('p-btn');
     btn.textContent = 'Claiming...';
     btn.disabled = true;
@@ -872,7 +872,7 @@
     clearInterval(timerInterval);
     clearTimeout(window._claimTimeout);
     if (currentLead && ws) {
-      ws.send(JSON.stringify({ type: 'pass', leadId: currentLead.id, lead: currentLead, repName }));
+      ws.send(JSON.stringify({ type: 'pass', leadId: currentLead.id, lead: currentLead, repName, repToken }));
     }
     // Release any stuck active lead state
     hasActiveLead = false;
@@ -966,7 +966,7 @@
     }
     const btn = document.getElementById('wclaim-' + leadId);
     if (btn) { btn.textContent = 'Claiming...'; btn.disabled = true; }
-    ws.send(JSON.stringify({ type: 'claim', leadId, repName }));
+    ws.send(JSON.stringify({ type: 'claim', leadId, repName, repToken }));
   }
   setInterval(() => { if (Object.keys(waitingQueue).length > 0) renderWaitingQueue(); }, 30000);
 
@@ -1076,7 +1076,7 @@
       setTimeout(() => { notesEl.style.borderColor = ''; notesEl.style.boxShadow = ''; notesEl.placeholder = 'Add call notes here...'; }, 3000);
       return;
     }
-    ws.send(JSON.stringify({ type: 'dispose', leadId, repName, disposition, notes }));
+    ws.send(JSON.stringify({ type: 'dispose', leadId, repName, repToken, disposition, notes }));
     ws.send(JSON.stringify({ type: 'release_lock', repName }));
     hasActiveLead = false; window._activeLeadData = null;
     // Auto-collapse after disposing
