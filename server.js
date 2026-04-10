@@ -509,41 +509,6 @@ wss.on('connection', (ws) => {
               );
               if (tr.rows.length > 0) {
                 verifiedName = tr.rows[0].name;
-                // Restore memory state from DB if server restarted
-                const activeResult = await pool.query(`
-                  SELECT e.lead_id FROM lead_events e
-                  WHERE e.event_type = 'claimed'
-                  AND e.rep_name = $1
-                  AND e.created_at > NOW() - INTERVAL '2 hours'
-                  AND NOT EXISTS (
-                    SELECT 1 FROM lead_events d
-                    WHERE d.lead_id = e.lead_id 
-                    AND d.event_type IN ('disposed', 'timeout', 'passed')
-                    AND d.created_at > e.created_at
-                  )
-                  AND NOT EXISTS (
-                    SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = e.lead_id
-                  )
-                  AND EXISTS (
-                    SELECT 1 FROM leads l WHERE l.id = e.lead_id
-                  )
-                  ORDER BY e.created_at DESC LIMIT 1
-                `, [verifiedName]);
-                
-                if (activeResult.rows.length > 0) {
-                  const activeLeadId = activeResult.rows[0].lead_id;
-                  // Restore memory state
-                  repActiveLeads[verifiedName] = activeLeadId;
-                  const cooldownMs = repCooldowns[verifiedName] ? Math.max(0, COOLDOWN_MS - (Date.now() - repCooldowns[verifiedName])) : 0;
-                  ws.send(JSON.stringify({
-                    type: 'server_state',
-                    hasActiveLead: true,
-                    activeLeadId,
-                    cooldownSecsLeft: Math.ceil(cooldownMs / 1000)
-                  }));
-                  console.log(`State restored from DB for ${verifiedName}: active=${activeLeadId}`);
-                  return;
-                }
               }
             } catch(e) { console.error('rep_init error:', e); }
           }
