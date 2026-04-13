@@ -1242,8 +1242,11 @@
 
   function buildScripts(lead) {
     const name = lead.firstName || '[Name]';
-    const equip = lead.fundsUsedFor || lead.customFields?.equipment_type || '';
-    const equipLine = equip ? equip : 'equipment';
+    // Filter out generic/junk values that shouldn't appear in scripts
+    const junkValues = ['something else', 'other', 'n/a', 'na', 'none', 'not sure', 'unsure', 'tbd', 'unknown'];
+    const rawEquip = lead.fundsUsedFor || lead.customFields?.equipment_type || '';
+    const equip = junkValues.includes(rawEquip.trim().toLowerCase()) ? '' : rawEquip.trim();
+    const equipLine = equip || 'equipment';
 
     // Get rep's first name from stored repName (e.g. "Josh Feinberg" -> "Josh")
     const repFirst = (repName || '').split(' ')[0] || 'Me';
@@ -1251,7 +1254,9 @@
     const scripts = [
       {
         label: 'No Answer Text',
-        text: `Hi ${name}, this is ${repFirst} from Everlasting Capital. I'm looking forward to helping with your ${equipLine} financing. This is my direct number — feel free to call or text me back.`
+        text: equip
+          ? `Hi ${name}, this is ${repFirst} from Everlasting Capital. I'm looking forward to helping with your ${equipLine} financing. This is my direct number — feel free to call or text me back.`
+          : `Hi ${name}, this is ${repFirst} from Everlasting Capital. I'm looking forward to helping with your funding needs. This is my direct number — feel free to call or text me back.`
       },
       {
         label: 'Left Message Text',
