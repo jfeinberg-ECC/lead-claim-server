@@ -126,6 +126,21 @@
     .notes-input { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 14px; resize: vertical; min-height: 70px; font-family: inherit; outline: none; }
     .notes-input:focus { border-color: #1D9E75; }
 
+    /* TEXT SCRIPTS PANEL */
+    .text-scripts-toggle { display:flex; align-items:center; gap:8px; background:#f0f4ff; border:1px solid #d0d8ff; border-radius:8px; padding:10px 14px; cursor:pointer; font-size:13px; font-weight:600; color:#3a5bd9; margin-bottom:10px; user-select:none; transition:background 0.15s; }
+    .text-scripts-toggle:hover { background:#e4eaff; }
+    .text-scripts-toggle .ts-arrow { font-size:10px; margin-left:auto; transition:transform 0.2s; }
+    .text-scripts-toggle.open .ts-arrow { transform:rotate(180deg); }
+    .text-scripts-panel { display:none; background:#f9faff; border:1px solid #e0e6ff; border-radius:10px; padding:14px; margin-bottom:14px; }
+    .text-scripts-panel.open { display:block; }
+    .ts-script { background:#fff; border:1px solid #e0e6ff; border-radius:8px; padding:12px; margin-bottom:10px; }
+    .ts-script:last-child { margin-bottom:0; }
+    .ts-script-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#3a5bd9; margin-bottom:6px; }
+    .ts-script-text { font-size:13px; color:#333; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+    .ts-copy-btn { display:flex; align-items:center; gap:5px; margin-top:8px; background:#3a5bd9; color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.15s; }
+    .ts-copy-btn:hover { background:#2d4bbf; }
+    .ts-copy-btn.copied { background:#0F6E56; }
+
     .dispose-section { margin-top: 14px; }
     .dispose-group-label { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; margin-top: 10px; }
     .dispose-group-label.lbl-positive { color: #0F6E56; }
@@ -1161,6 +1176,12 @@
         </div>
         <div class="notes-label">Notes</div>
         <textarea class="notes-input" id="notes-${lead.id}" placeholder="Add call notes here..."></textarea>
+
+        <div class="text-scripts-toggle" id="ts-toggle-${lead.id}" onclick="toggleScripts('${lead.id}')">
+          💬 Text Scripts <span class="ts-arrow">▼</span>
+        </div>
+        <div class="text-scripts-panel" id="ts-panel-${lead.id}"></div>
+
         <div class="dispose-section">
           <div class="dispose-group-label lbl-positive">✅ Positive — Salesforce</div>
           <div class="dispose-buttons cols-2">
@@ -1182,6 +1203,9 @@
         </div>
       </div>
     `;
+    // Store lead data for text scripts
+    if (!window._leadDataMap) window._leadDataMap = {};
+    window._leadDataMap[lead.id] = lead;
     const leadCardsEl = document.getElementById('lead-cards');
     // Active leads go to top, disposed go to bottom
     const firstDisposed = leadCardsEl.querySelector('.lead-card.collapsed');
@@ -1195,6 +1219,74 @@
   function field(label, val) {
     if (!val) return '';
     return `<div class="lead-field"><div class="field-label">${label}</div><div class="field-val">${val}</div></div>`;
+  }
+
+  function toggleScripts(leadId) {
+    const toggle = document.getElementById('ts-toggle-' + leadId);
+    const panel = document.getElementById('ts-panel-' + leadId);
+    const isOpen = panel.classList.contains('open');
+    if (!isOpen) {
+      // Build scripts on first open using lead data
+      const lead = window._leadDataMap && window._leadDataMap[leadId];
+      if (lead && !panel.dataset.built) {
+        panel.innerHTML = buildScripts(lead);
+        panel.dataset.built = '1';
+      }
+      panel.classList.add('open');
+      toggle.classList.add('open');
+    } else {
+      panel.classList.remove('open');
+      toggle.classList.remove('open');
+    }
+  }
+
+  function buildScripts(lead) {
+    const name = lead.firstName || '[Name]';
+    const equip = lead.fundsUsedFor || lead.customFields?.equipment_type || '';
+    const equipLine = equip ? equip : 'equipment';
+    const company = lead.companyName ? ` for ${lead.companyName}` : '';
+
+    const scripts = [
+      {
+        label: 'After Missed Call — New Lead',
+        text: `Hi ${name}, this is Steve from Everlasting Capital. I'm looking forward to helping with your ${equipLine} financing. This is my direct number — feel free to call or text me back.`
+      },
+      {
+        label: 'After Leaving a Voicemail',
+        text: equip
+          ? `Hi ${name}, it's Steve from Everlasting. I just tried calling — this is my direct number. I was following up on your inquiry for financing options for a ${equipLine}. Do you have one in mind or are you still looking?`
+          : `Hi ${name}, it's Steve from Everlasting. I just tried calling — this is my direct number. I was following up on your inquiry for financing options. Was it for equipment or capital options?`
+      },
+      {
+        label: 'IMN Lead — Went Ghost After App Sent',
+        text: `Hi ${name}, just checking in — I sent over the application and wanted to make sure you received it. Let me know if you have any questions, I'm here to help get this moving for you.`
+      },
+      {
+        label: 'Final Chase — Multiple Attempts, No Response',
+        text: `Hi ${name}, I've reached out to you several times — is this something you're still interested in? Please let me know either way.`
+      }
+    ];
+
+    return scripts.map((s, i) => `
+      <div class="ts-script">
+        <div class="ts-script-label">${s.label}</div>
+        <div class="ts-script-text" id="ts-text-${lead.id}-${i}">${s.text}</div>
+        <button class="ts-copy-btn" id="ts-btn-${lead.id}-${i}" onclick="copyScript('${lead.id}', ${i})">
+          📋 Copy
+        </button>
+      </div>
+    `).join('');
+  }
+
+  function copyScript(leadId, idx) {
+    const el = document.getElementById(`ts-text-${leadId}-${idx}`);
+    const btn = document.getElementById(`ts-btn-${leadId}-${idx}`);
+    if (!el || !btn) return;
+    navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+      btn.textContent = '✅ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.innerHTML = '📋 Copy'; btn.classList.remove('copied'); }, 2000);
+    });
   }
 
   function copyPhone(phone) {
@@ -1252,6 +1344,9 @@
       card.appendChild(banner);
     }
     // Move disposed card to bottom of lead list
+    // Store lead data for text scripts
+    if (!window._leadDataMap) window._leadDataMap = {};
+    window._leadDataMap[lead.id] = lead;
     const leadCardsEl = document.getElementById('lead-cards');
     if (leadCardsEl && card.parentNode === leadCardsEl) {
       leadCardsEl.appendChild(card);
