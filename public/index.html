@@ -1250,22 +1250,14 @@
 
     const scripts = [
       {
-        label: 'After Missed Call — New Lead',
+        label: 'No Answer Text',
         text: `Hi ${name}, this is ${repFirst} from Everlasting Capital. I'm looking forward to helping with your ${equipLine} financing. This is my direct number — feel free to call or text me back.`
       },
       {
-        label: 'After Leaving a Voicemail',
+        label: 'Left Message Text',
         text: equip
           ? `Hi ${name}, it's ${repFirst} from Everlasting. I just tried calling — this is my direct number. I was following up on your inquiry for financing options for a ${equipLine}. Do you have one in mind or are you still looking?`
           : `Hi ${name}, it's ${repFirst} from Everlasting. I just tried calling — this is my direct number. I was following up on your inquiry for financing options. Was it for equipment or capital options?`
-      },
-      {
-        label: 'IMN Lead — Went Ghost After App Sent',
-        text: `Hi ${name}, just checking in — I sent over the application and wanted to make sure you received it. Let me know if you have any questions, I'm here to help get this moving for you.`
-      },
-      {
-        label: 'Final Chase — Multiple Attempts, No Response',
-        text: `Hi ${name}, I've reached out to you several times — is this something you're still interested in? Please let me know either way.`
       }
     ];
 
