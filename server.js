@@ -399,6 +399,8 @@ wss.on('connection', (ws) => {
                 timeline: r.timeline, timeInBusiness: r.time_in_business,
                 monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
                 conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
+                leadSource: r.lead_source || 'Facebook',
+                customFields: r.custom_fields || {},
               };
               leadData[leadId] = lead;
             }
