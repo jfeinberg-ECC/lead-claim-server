@@ -778,6 +778,7 @@
       }
 
       if (msg.type === 'waiting_queue_init') {
+        waitingQueue = {}; // Reset first
         msg.queue.forEach(row => {
           const lead = row.lead_data;
           const leadId = row.lead_id || (lead && lead.id);
@@ -1093,10 +1094,10 @@
     });
   }
   function claimFromQueue(leadId) {
-    if (!ws) return;
+    if (!ws || ws.readyState !== 1) { alert('Not connected — please refresh the page.'); return; }
     if (hasActiveLead) { alert('Dispose your current lead before claiming a new one.'); return; }
     if (onCooldown) { alert(`Please wait ${cooldownLeft} seconds before claiming another lead.`); return; }
-    // Check if lead is outside calling hours
+    // Check calling hours only if we have the lead data
     const qItem = waitingQueue[leadId];
     if (qItem && qItem.lead && qItem.lead.timezone) {
       const secs = secondsUntilCallingHours(qItem.lead.timezone);
@@ -1107,7 +1108,15 @@
     }
     const btn = document.getElementById('wclaim-' + leadId);
     if (btn) { btn.textContent = 'Claiming...'; btn.disabled = true; }
+    // Always send claim regardless of local waitingQueue state
     ws.send(JSON.stringify({ type: 'claim', leadId, repName, repToken }));
+    // Set a timeout to re-enable button if no response in 5s
+    setTimeout(() => {
+      if (btn && btn.textContent === 'Claiming...') {
+        btn.textContent = 'Claim';
+        btn.disabled = false;
+      }
+    }, 5000);
   }
   setInterval(() => { if (Object.keys(waitingQueue).length > 0) renderWaitingQueue(); }, 30000);
 
