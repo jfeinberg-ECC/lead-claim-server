@@ -1280,9 +1280,14 @@ async function recoverOrphanedLeads() {
         AND e.event_type IN ('disposed', 'timeout')
       )
     `);
+    // Get currently active lead IDs from memory to exclude them
+    const activeLeadIds = Object.values(repActiveLeads);
+    const activeLeadIdList = activeLeadIds.length > 0 ? activeLeadIds : ['__none__'];
+
     const result = await pool.query(`
       SELECT l.* FROM leads l
       WHERE l.received_at > NOW() - INTERVAL '30 days'
+      AND l.id != ALL($1::text[])
       AND NOT EXISTS (
         SELECT 1 FROM lead_events e 
         WHERE e.lead_id = l.id AND e.event_type IN ('disposed', 'timeout')
@@ -1290,7 +1295,6 @@ async function recoverOrphanedLeads() {
       AND NOT EXISTS (
         SELECT 1 FROM lead_events e2 
         WHERE e2.lead_id = l.id AND e2.event_type = 'claimed'
-        AND e2.created_at > NOW() - INTERVAL '2 hours'
         AND NOT EXISTS (
           SELECT 1 FROM lead_events d 
           WHERE d.lead_id = l.id AND d.event_type IN ('disposed','timeout','passed')
@@ -1299,7 +1303,7 @@ async function recoverOrphanedLeads() {
       AND NOT EXISTS (
         SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = l.id
       )
-    `);
+    `, [activeLeadIdList]);
     for (const r of result.rows) {
       const lead = {
         id: r.id, leadType: r.lead_type, timezone: r.timezone,
