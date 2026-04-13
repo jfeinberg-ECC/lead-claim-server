@@ -466,7 +466,10 @@
     tb.innerHTML = data.map(l=>`
       <tr>
         <td><input type="checkbox" class="lead-checkbox" value="${l.id}" onclick="updateBulkBar()" /></td>
-        <td><button class="delete-btn" onclick="deleteLead('${l.id}')" title="Delete lead">🗑</button></td>
+        <td style="display:flex;gap:4px;align-items:center">
+          <button class="delete-btn" onclick="deleteLead('${l.id}')" title="Delete lead">🗑</button>
+          ${l.claimed_at && !l.disposition ? `<button onclick="unclaimLead('${l.id}', '${(l.first_name||'')} ${(l.last_name||'')}', event)" title="Unclaim — return to queue" style="padding:3px 7px;background:#fff3cd;color:#856404;border:1px solid #ffc107;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer">↩ Unclaim</button>` : ''}
+        </td>
         <td>${formatDate(l.received_at)}</td>
         <td><span class="badge ${l.lead_type==='Working Capital'?'badge-vs':'badge-positive'}">${l.lead_type}</span></td>
         <td>${l.first_name} ${l.last_name}</td>
@@ -479,6 +482,18 @@
         <td>${l.disposition?`<span class="badge ${dBadge(l.disposition)}">${dispMap[l.disposition]||l.disposition}</span>`:'—'}</td>
         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.notes||'—'}</td>
       </tr>`).join('');
+  }
+
+  async function unclaimLead(id, name, e) {
+    e.stopPropagation();
+    if (!confirm(`Return ${name.trim()} to the waiting queue?`)) return;
+    const data = await api(`/admin/leads/${id}/unclaim`, { method: 'POST' });
+    if (data?.success) {
+      showToast(`↩ ${name.trim()} returned to queue`);
+      loadLeads();
+    } else {
+      alert('Error unclaiming lead');
+    }
   }
 
   async function deleteLead(id) {
