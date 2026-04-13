@@ -1,1379 +1,1526 @@
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const path = require('path');
-const { Pool } = require('pg');
-const crypto = require('crypto');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voltlead — Lead Claim Board</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #111; }
 
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+    /* ── LOGIN ── */
+    #login-screen { position: fixed; inset: 0; background: #f5f5f5; display: flex; align-items: center; justify-content: center; z-index: 200; }
+    .login-card { background: #fff; border-radius: 14px; border: 1px solid #e0e0e0; padding: 2.5rem; width: 360px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.07); }
+    .login-logo { font-size: 26px; font-weight: 800; color: #1D9E75; margin-bottom: 4px; letter-spacing: -0.5px; }
+    .login-logo span { color: #111; }
+    .login-sub { font-size: 13px; color: #888; margin-bottom: 1.8rem; }
+    .login-card input { width: 100%; padding: 11px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-bottom: 10px; outline: none; }
+    .login-card input:focus { border-color: #1D9E75; }
+    .login-card input[type=password] { margin-bottom: 0; }
+    .login-card button { width: 100%; padding: 12px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .login-card button:hover { background: #0F6E56; }
+    .login-error { color: #c0392b; font-size: 13px; margin-top: 8px; }
 
-app.use(express.json({ limit: '10mb' }));
+    /* ── ACCOUNT MODAL ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 300; opacity: 0; pointer-events: none; transition: opacity 0.2s; padding: 20px; }
+    .modal-overlay.active { opacity: 1; pointer-events: all; }
+    .modal { background: #fff; border-radius: 16px; padding: 2rem; max-width: 400px; width: 90%; max-height: 85vh; overflow-y: auto; }
+    .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 1.2rem; }
+    .modal-close { float: right; cursor: pointer; color: #aaa; font-size: 20px; line-height: 1; }
+    .modal-section { margin-bottom: 1.2rem; }
+    .modal-section label { font-size: 12px; color: #666; font-weight: 500; display: block; margin-bottom: 5px; }
+    .modal-section input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+    .modal-section input:focus { border-color: #1D9E75; }
+    .modal-btn { width: 100%; padding: 11px; background: #1D9E75; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+    .modal-btn:hover { background: #0F6E56; }
+    .modal-msg { font-size: 13px; margin-top: 8px; text-align: center; }
+    .modal-msg.success { color: #0F6E56; }
+    .modal-msg.error { color: #c0392b; }
+    .pic-upload-area { border: 2px dashed #ddd; border-radius: 10px; padding: 1.2rem; text-align: center; cursor: pointer; transition: border-color 0.15s; overflow: hidden; max-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .pic-upload-area:hover { border-color: #1D9E75; }
+    .pic-preview { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin: 0 auto 8px; display: block; flex-shrink: 0; }
+    .pic-upload-label { font-size: 13px; color: #888; }
 
-// Never cache ANY static files — always serve fresh
-app.use((req, res, next) => {
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  next();
-});
+    /* ── DASHBOARD ── */
+    #dashboard { display: none; max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+    .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; }
+    .top-bar-logo { font-size: 18px; font-weight: 800; color: #1D9E75; letter-spacing: -0.5px; }
+    .top-bar-logo span { color: #111; }
+    .conn-status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #666; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
+    .dot.live { background: #1D9E75; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-app.use(express.static(path.join(__dirname, 'public'), {
-  etag: false,
-  lastModified: false,
-  maxAge: 0
-}));
+    .notif-bar { background: #FFF8E1; border: 1px solid #FFE082; border-radius: 10px; padding: 10px 16px; font-size: 13px; color: #795548; margin-bottom: 1.2rem; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .notif-bar button { padding: 6px 14px; background: #F5A623; color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
 
-// ── DATABASE ─────────────────────────────────────────────────
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+    .tz-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.2rem; }
+    .tz-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 10px 14px; text-align: center; }
+    .tz-label { font-size: 11px; color: #888; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+    .tz-time { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+    .tz-time.in-hours { color: #1D9E75; }
+    .tz-time.out-hours { color: #aaa; }
 
-async function initDB() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS leads (
-      id TEXT PRIMARY KEY,
-      lead_type TEXT,
-      first_name TEXT,
-      last_name TEXT,
-      phone TEXT,
-      email TEXT,
-      company_name TEXT,
-      state TEXT,
-      timezone TEXT,
-      within_calling_hours BOOLEAN,
-      qualify_amount TEXT,
-      timeline TEXT,
-      time_in_business TEXT,
-      monthly_revenue TEXT,
-      funds_used_for TEXT,
-      conducts_business TEXT,
-      campaign_name TEXT,
-      form_name TEXT,
-      lead_source TEXT DEFAULT 'Facebook',
-      custom_fields JSONB DEFAULT '{}',
-      received_at TIMESTAMPTZ DEFAULT NOW()
-    );
+    .agent-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; margin-bottom: 1.2rem; cursor: pointer; transition: border-color 0.15s; }
+    .agent-bar:hover { border-color: #1D9E75; }
+    .avatar { width: 38px; height: 38px; border-radius: 50%; background: #CECBF6; color: #3C3489; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; overflow: hidden; flex-shrink: 0; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .agent-name { font-size: 14px; font-weight: 600; }
+    .agent-sub { font-size: 12px; color: #888; }
+    .agent-edit-hint { font-size: 11px; color: #bbb; margin-left: auto; }
+    .cooldown-bar { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888; }
+    .cooldown-timer { font-weight: 600; color: #D85A30; }
 
-    CREATE TABLE IF NOT EXISTS lead_events (
-      id SERIAL PRIMARY KEY,
-      lead_id TEXT,
-      event_type TEXT,
-      rep_name TEXT,
-      disposition TEXT,
-      notes TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
+    .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 1.2rem; }
+    .stat { background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; padding: 12px 14px; }
+    .stat-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .stat-val { font-size: 22px; font-weight: 700; }
+    .stat-val.positive { color: #0F6E56; }
+    .stat-val.salesforce { color: #185FA5; }
+    .stat-val.negative { color: #993C1D; }
 
-    CREATE TABLE IF NOT EXISTS waiting_queue (
-      lead_id TEXT PRIMARY KEY,
-      lead_data JSONB,
-      added_at TIMESTAMPTZ DEFAULT NOW()
-    );
+    .section-label { font-size: 12px; color: #888; font-weight: 500; letter-spacing: 0.04em; margin-bottom: 10px; text-transform: uppercase; }
+    .empty-state { text-align: center; padding: 3rem; color: #aaa; font-size: 14px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; }
 
-    CREATE TABLE IF NOT EXISTS admins (
-      id SERIAL PRIMARY KEY,
-      username TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      is_super_admin BOOLEAN DEFAULT FALSE,
-      linked_rep_id INTEGER,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
+    .waiting-section { margin-bottom: 1.5rem; }
+    .waiting-cards { display: flex; flex-direction: column; gap: 8px; }
+    .waiting-card { background: #fff; border: 1px solid #F0C060; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .waiting-card-info { display: flex; align-items: center; gap: 10px; flex: 1; }
+    .waiting-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 5px; white-space: nowrap; }
+    .waiting-badge.wc { background: #E1F5EE; color: #0F6E56; }
+    .waiting-badge.ef { background: #E6F1FB; color: #0C447C; }
+    .waiting-meta { font-size: 12px; color: #888; }
+    .waiting-age { font-size: 11px; color: #bbb; margin-left: auto; white-space: nowrap; }
+    .waiting-claim-btn { padding: 8px 16px; background: #F5A623; color: #fff; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .waiting-claim-btn:hover { background: #D4881A; }
+    .waiting-claim-btn:disabled { background: #ccc; cursor: default; }
+    .waiting-empty { text-align: center; padding: 1rem; color: #ccc; font-size: 13px; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; }
 
-    CREATE TABLE IF NOT EXISTS admin_sessions (
-      token TEXT PRIMARY KEY,
-      admin_id INTEGER REFERENCES admins(id) ON DELETE CASCADE,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '24 hours'
-    );
+    .lead-cards { display: flex; flex-direction: column; gap: 12px; }
+    .lead-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; overflow: hidden; }
+    /* lead-card-header defined above */
+    .lead-type-badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px; }
+    .badge-wc { background: #E1F5EE; color: #0F6E56; }
+    .badge-ef { background: #E6F1FB; color: #0C447C; }
+    .source-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 5px; background: #f0f0f0; color: #666; }
+    .source-facebook { background: #E7F0FD; color: #1877F2; }
+    .source-google { background: #FDE8E8; color: #DB4437; }
+    .source-tiktok { background: #F0E6FF; color: #6B21A8; }
+    .source-manual { background: #FFF3CD; color: #856404; }
+    .source-cold-call { background: #E8F5E9; color: #2E7D32; }
+    .lead-meta { font-size: 12px; color: #aaa; }
+    .lead-card-body { padding: 16px; }
+    .lead-name { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+    .lead-phone { font-size: 15px; color: #378ADD; margin-bottom: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .lead-phone:hover { color: #1D9E75; }
+    .copy-hint { font-size: 12px; opacity: 0.5; }
+    .lead-tz { font-size: 12px; color: #888; margin-bottom: 12px; }
+    .lead-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+    .lead-field { background: #f8f8f8; border-radius: 8px; padding: 8px 12px; }
+    .field-label { font-size: 11px; color: #888; margin-bottom: 2px; }
+    .field-val { font-size: 13px; font-weight: 500; }
+    .notes-label { font-size: 12px; color: #888; margin-bottom: 6px; font-weight: 500; }
+    .notes-input { width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 14px; resize: vertical; min-height: 70px; font-family: inherit; outline: none; }
+    .notes-input:focus { border-color: #1D9E75; }
 
-    CREATE TABLE IF NOT EXISTS reps (
-      id SERIAL PRIMARY KEY,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      first_name TEXT,
-      last_name TEXT,
-      password_hash TEXT,
-      profile_pic TEXT,
-      active BOOLEAN DEFAULT TRUE,
-      invited_at TIMESTAMPTZ DEFAULT NOW(),
-      last_login TIMESTAMPTZ
-    );
+    /* TEXT SCRIPTS PANEL */
+    .text-scripts-toggle { display:flex; align-items:center; gap:8px; background:#f0f4ff; border:1px solid #d0d8ff; border-radius:8px; padding:10px 14px; cursor:pointer; font-size:13px; font-weight:600; color:#3a5bd9; margin-bottom:10px; user-select:none; transition:background 0.15s; }
+    .text-scripts-toggle:hover { background:#e4eaff; }
+    .text-scripts-toggle .ts-arrow { font-size:10px; margin-left:auto; transition:transform 0.2s; }
+    .text-scripts-toggle.open .ts-arrow { transform:rotate(180deg); }
+    .text-scripts-panel { display:none; background:#f9faff; border:1px solid #e0e6ff; border-radius:10px; padding:14px; margin-bottom:14px; }
+    .text-scripts-panel.open { display:block; }
+    .ts-script { background:#fff; border:1px solid #e0e6ff; border-radius:8px; padding:12px; margin-bottom:10px; }
+    .ts-script:last-child { margin-bottom:0; }
+    .ts-script-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#3a5bd9; margin-bottom:6px; }
+    .ts-script-text { font-size:13px; color:#333; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+    .ts-copy-btn { display:flex; align-items:center; gap:5px; margin-top:8px; background:#3a5bd9; color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.15s; }
+    .ts-copy-btn:hover { background:#2d4bbf; }
+    .ts-copy-btn.copied { background:#0F6E56; }
 
-    CREATE TABLE IF NOT EXISTS rep_sessions (
-      token TEXT PRIMARY KEY,
-      rep_id INTEGER REFERENCES reps(id) ON DELETE CASCADE,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days'
-    );
+    .dispose-section { margin-top: 14px; }
+    .dispose-group-label { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; margin-top: 10px; }
+    .dispose-group-label.lbl-positive { color: #0F6E56; }
+    .dispose-group-label.lbl-salesforce { color: #185FA5; }
+    .dispose-group-label.lbl-negative { color: #993C1D; }
+    .dispose-buttons { display: grid; gap: 8px; }
+    .dispose-buttons.cols-2 { grid-template-columns: 1fr 1fr; }
+    .dispose-buttons.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .dispose-btn { padding: 10px 8px; border-radius: 8px; border: 1px solid #e0e0e0; background: #fff; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; text-align: center; }
+    .dispose-btn:hover { transform: translateY(-1px); }
+    .dispose-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+    .btn-imn-app  { border-color: #5DCAA5; color: #085041; background: #E1F5EE; } .btn-imn-app:hover  { background: #9FE1CB; }
+    .btn-imn-sent { border-color: #9FE1CB; color: #085041; }                     .btn-imn-sent:hover { background: #E1F5EE; }
+    .btn-lm  { border-color: #93C4F0; color: #0C447C; } .btn-lm:hover  { background: #E6F1FB; }
+    .btn-na  { border-color: #93C4F0; color: #0C447C; } .btn-na:hover  { background: #E6F1FB; }
+    .btn-iml { border-color: #93C4F0; color: #0C447C; } .btn-iml:hover { background: #E6F1FB; }
+    .btn-nq  { border-color: #F09595; color: #791F1F; } .btn-nq:hover  { background: #FCEBEB; }
+    .btn-ni  { border-color: #F09595; color: #791F1F; } .btn-ni:hover  { background: #FCEBEB; }
+    .btn-wn  { border-color: #B4B2A9; color: #444441; } .btn-wn:hover  { background: #F1EFE8; }
 
-    CREATE TABLE IF NOT EXISTS rep_invites (
-      token TEXT PRIMARY KEY,
-      rep_id INTEGER REFERENCES reps(id) ON DELETE CASCADE,
-      used BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days'
-    );
-  `);
+    .disposed-banner { padding: 12px 16px; text-align: center; font-size: 13px; font-weight: 500; border-top: 1px solid #f0f0f0; }
+    .lead-card.collapsed .lead-card-body { display: none; }
+    .lead-card.collapsed .disposed-banner { display: none; }
+    .collapse-btn { background: none; border: none; cursor: pointer; font-size: 13px; color: #aaa; padding: 2px 8px; border-radius: 5px; margin-left: auto; }
+    .collapse-btn:hover { background: #f5f5f5; color: #666; }
+    .lead-card-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+    .lead-card-header:hover { background: #fafafa; }
+    .lead-card-summary { font-size: 12px; color: #888; margin-left: 10px; flex: 1; }
+    .disposed-positive   { background: #E1F5EE; color: #085041; }
+    .disposed-salesforce { background: #E6F1FB; color: #0C447C; }
+    .disposed-negative   { background: #FCEBEB; color: #791F1F; }
 
-  // Default super admin
-  const existing = await pool.query('SELECT id FROM admins WHERE is_super_admin = TRUE LIMIT 1');
-  if (existing.rows.length === 0) {
-    const hash = hashPassword('changeme123');
-    await pool.query(
-      'INSERT INTO admins (username, password_hash, is_super_admin) VALUES ($1, $2, TRUE) ON CONFLICT DO NOTHING',
-      ['admin', hash]
-    );
-    console.log('Default super admin created: admin / changeme123');
-  }
-  // Add columns if they don't exist (safe migration)
-  await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS first_name TEXT").catch(()=>{});
-  await pool.query("ALTER TABLE reps ADD COLUMN IF NOT EXISTS last_name TEXT").catch(()=>{});
-  await pool.query("ALTER TABLE admins ADD COLUMN IF NOT EXISTS linked_rep_id INTEGER").catch(()=>{});
-  await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS lead_source TEXT DEFAULT 'Facebook'").catch(()=>{});
-  await pool.query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'").catch(()=>{});
-  console.log('Database initialized');
-}
+    .popup-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .popup-overlay.active { opacity: 1; pointer-events: all; }
+    .popup { background: #fff; border-radius: 16px; padding: 2rem; max-width: 360px; width: 90%; text-align: center; }
+    .popup-new { display: inline-block; background: #FAECE7; color: #993C1D; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 6px; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .popup-type { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
+    .popup-type.wc { color: #0F6E56; }
+    .popup-type.ef { color: #185FA5; }
+    .popup-tz { font-size: 13px; color: #888; margin-bottom: 1.5rem; }
+    .popup-hours-warn { background: #FCEBEB; color: #791F1F; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 1rem; }
+    .popup-locked { background: #FFF3CD; color: #856404; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 1rem; font-weight: 500; }
+    .popup-timer { font-size: 13px; color: #888; margin-bottom: 6px; }
+    .timer-bar-wrap { height: 4px; background: #eee; border-radius: 2px; margin-bottom: 1.5rem; overflow: hidden; }
+    .timer-bar { height: 100%; background: #D85A30; border-radius: 2px; transition: width 1s linear; }
+    .popup-claim-btn { width: 100%; padding: 13px; background: #1D9E75; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 10px; transition: background 0.15s; }
+    .popup-claim-btn:hover { background: #0F6E56; }
+    .popup-claim-btn:disabled { background: #aaa; cursor: default; }
+    .popup-pass { font-size: 13px; color: #aaa; cursor: pointer; text-decoration: underline; }
+    .popup-result { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    .popup-result.success { color: #0F6E56; }
+    .popup-result.failed { color: #993C1D; }
 
-// ── IN-MEMORY STATE ──────────────────────────────────────────
-const claimedLeads = {};
-const leadData = {};
-const clients = new Set();
-const repCooldowns = {};
-const repActiveLeads = {};
-const COOLDOWN_MS = 60000;
+    .cooldown-overlay { position: fixed; bottom: 20px; right: 20px; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 12px 18px; font-size: 14px; color: #666; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: none; z-index: 50; }
+    .cooldown-overlay.active { display: block; }
+    .copy-toast { position: fixed; bottom: 80px; right: 20px; background: #333; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 200; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    .copy-toast.show { opacity: 1; }
 
-// ── HELPERS ──────────────────────────────────────────────────
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password + 'voltlead_salt').digest('hex');
-}
+    /* ── MOBILE ── */
+    @media (max-width: 600px) {
+      #dashboard { padding: 0.8rem; }
 
-function generateToken() {
-  return crypto.randomBytes(32).toString('hex');
-}
+      /* Stack timezone clocks 2x2 */
+      .tz-bar { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .tz-time { font-size: 16px; }
+      .tz-label { font-size: 10px; }
 
-async function sendEmail(to, subject, html) {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@voltlead.io';
-  if (!apiKey) { console.warn('No SendGrid API key'); return; }
-  try {
-    const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: to }] }],
-        from: { email: fromEmail, name: 'Voltlead' },
-        subject,
-        content: [{ type: 'text/html', value: html }]
-      })
-    });
-    if (res.ok) console.log(`Email sent to ${to}`);
-    else console.error(`SendGrid error: ${res.status}`, await res.text());
-  } catch (err) {
-    console.error('Email error:', err);
-  }
-}
+      /* Stack stats 3x2 */
+      .stats { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+      .stat-val { font-size: 18px; }
+      .stat-label { font-size: 10px; }
+      .stat { padding: 10px; }
 
-// ── TIMEZONE HELPERS ─────────────────────────────────────────
-const areaCodeTimezones = {
-  '201':'America/New_York','202':'America/New_York','203':'America/New_York','207':'America/New_York',
-  '212':'America/New_York','215':'America/New_York','216':'America/New_York','217':'America/Chicago',
-  '218':'America/Chicago','219':'America/Chicago','224':'America/Chicago','225':'America/Chicago',
-  '228':'America/Chicago','229':'America/New_York','231':'America/New_York','234':'America/New_York',
-  '239':'America/New_York','240':'America/New_York','248':'America/New_York','251':'America/Chicago',
-  '252':'America/New_York','256':'America/Chicago','260':'America/New_York','267':'America/New_York',
-  '269':'America/New_York','270':'America/Chicago','272':'America/New_York','276':'America/New_York',
-  '281':'America/Chicago','301':'America/New_York','302':'America/New_York','303':'America/Denver',
-  '304':'America/New_York','305':'America/New_York','309':'America/Chicago','310':'America/Los_Angeles',
-  '312':'America/Chicago','313':'America/New_York','314':'America/Chicago','315':'America/New_York',
-  '316':'America/Chicago','317':'America/New_York','318':'America/Chicago','319':'America/Chicago',
-  '320':'America/Chicago','321':'America/New_York','323':'America/Los_Angeles','325':'America/Chicago',
-  '330':'America/New_York','331':'America/Chicago','334':'America/Chicago','336':'America/New_York',
-  '337':'America/Chicago','339':'America/New_York','346':'America/Chicago','347':'America/New_York',
-  '351':'America/New_York','352':'America/New_York','360':'America/Los_Angeles','361':'America/Chicago',
-  '380':'America/New_York','385':'America/Denver','386':'America/New_York','401':'America/New_York',
-  '402':'America/Chicago','404':'America/New_York','405':'America/Chicago','406':'America/Denver',
-  '407':'America/New_York','408':'America/Los_Angeles','409':'America/Chicago','410':'America/New_York',
-  '412':'America/New_York','413':'America/New_York','414':'America/Chicago','415':'America/Los_Angeles',
-  '417':'America/Chicago','419':'America/New_York','423':'America/New_York','424':'America/Los_Angeles',
-  '425':'America/Los_Angeles','430':'America/Chicago','432':'America/Chicago','434':'America/New_York',
-  '435':'America/Denver','440':'America/New_York','442':'America/Los_Angeles','443':'America/New_York',
-  '458':'America/Los_Angeles','463':'America/New_York','469':'America/Chicago','470':'America/New_York',
-  '475':'America/New_York','478':'America/New_York','479':'America/Chicago','480':'America/Phoenix',
-  '484':'America/New_York','501':'America/Chicago','502':'America/New_York','503':'America/Los_Angeles',
-  '504':'America/Chicago','505':'America/Denver','507':'America/Chicago','508':'America/New_York',
-  '509':'America/Los_Angeles','510':'America/Los_Angeles','512':'America/Chicago','513':'America/New_York',
-  '515':'America/Chicago','516':'America/New_York','517':'America/New_York','518':'America/New_York',
-  '520':'America/Phoenix','530':'America/Los_Angeles','531':'America/Chicago','539':'America/Chicago',
-  '540':'America/New_York','541':'America/Los_Angeles','551':'America/New_York','559':'America/Los_Angeles',
-  '561':'America/New_York','562':'America/Los_Angeles','563':'America/Chicago','567':'America/New_York',
-  '570':'America/New_York','571':'America/New_York','573':'America/Chicago','574':'America/New_York',
-  '575':'America/Denver','580':'America/Chicago','585':'America/New_York','586':'America/New_York',
-  '601':'America/Chicago','602':'America/Phoenix','603':'America/New_York','605':'America/Chicago',
-  '606':'America/New_York','607':'America/New_York','608':'America/Chicago','609':'America/New_York',
-  '610':'America/New_York','612':'America/Chicago','614':'America/New_York','615':'America/New_York',
-  '616':'America/New_York','617':'America/New_York','618':'America/Chicago','619':'America/Los_Angeles',
-  '620':'America/Chicago','623':'America/Phoenix','626':'America/Los_Angeles','628':'America/Los_Angeles',
-  '629':'America/New_York','630':'America/Chicago','631':'America/New_York','636':'America/Chicago',
-  '641':'America/Chicago','646':'America/New_York','650':'America/Los_Angeles','651':'America/Chicago',
-  '657':'America/Los_Angeles','660':'America/Chicago','661':'America/Los_Angeles','662':'America/Chicago',
-  '667':'America/New_York','669':'America/Los_Angeles','678':'America/New_York','681':'America/New_York',
-  '682':'America/Chicago','689':'America/New_York','701':'America/Chicago','702':'America/Los_Angeles',
-  '703':'America/New_York','704':'America/New_York','706':'America/New_York','707':'America/Los_Angeles',
-  '708':'America/Chicago','712':'America/Chicago','713':'America/Chicago','714':'America/Los_Angeles',
-  '715':'America/Chicago','716':'America/New_York','717':'America/New_York','718':'America/New_York',
-  '719':'America/Denver','720':'America/Denver','724':'America/New_York','725':'America/Los_Angeles',
-  '726':'America/Chicago','727':'America/New_York','731':'America/Chicago','732':'America/New_York',
-  '734':'America/New_York','737':'America/Chicago','740':'America/New_York','747':'America/Los_Angeles',
-  '754':'America/New_York','757':'America/New_York','760':'America/Los_Angeles','762':'America/New_York',
-  '763':'America/Chicago','765':'America/New_York','769':'America/Chicago','770':'America/New_York',
-  '772':'America/New_York','773':'America/Chicago','774':'America/New_York','775':'America/Los_Angeles',
-  '779':'America/Chicago','781':'America/New_York','785':'America/Chicago','786':'America/New_York',
-  '801':'America/Denver','802':'America/New_York','803':'America/New_York','804':'America/New_York',
-  '805':'America/Los_Angeles','806':'America/Chicago','808':'Pacific/Honolulu','810':'America/New_York',
-  '812':'America/New_York','813':'America/New_York','814':'America/New_York','815':'America/Chicago',
-  '816':'America/Chicago','817':'America/Chicago','818':'America/Los_Angeles','828':'America/New_York',
-  '830':'America/Chicago','831':'America/Los_Angeles','832':'America/Chicago','838':'America/New_York',
-  '843':'America/New_York','845':'America/New_York','847':'America/Chicago','848':'America/New_York',
-  '850':'America/Chicago','856':'America/New_York','857':'America/New_York','858':'America/Los_Angeles',
-  '859':'America/New_York','860':'America/New_York','862':'America/New_York','863':'America/New_York',
-  '864':'America/New_York','865':'America/New_York','870':'America/Chicago','872':'America/Chicago',
-  '878':'America/New_York','901':'America/Chicago','903':'America/Chicago','904':'America/New_York',
-  '906':'America/New_York','907':'America/Anchorage','908':'America/New_York','909':'America/Los_Angeles',
-  '910':'America/New_York','912':'America/New_York','913':'America/Chicago','914':'America/New_York',
-  '915':'America/Denver','916':'America/Los_Angeles','917':'America/New_York','918':'America/Chicago',
-  '919':'America/New_York','920':'America/Chicago','925':'America/Los_Angeles','928':'America/Phoenix',
-  '929':'America/New_York','931':'America/Chicago','936':'America/Chicago','937':'America/New_York',
-  '940':'America/Chicago','941':'America/New_York','947':'America/New_York','949':'America/Los_Angeles',
-  '951':'America/Los_Angeles','952':'America/Chicago','954':'America/New_York','956':'America/Chicago',
-  '959':'America/New_York','970':'America/Denver','971':'America/Los_Angeles','972':'America/Chicago',
-  '973':'America/New_York','978':'America/New_York','979':'America/Chicago','980':'America/New_York',
-  '984':'America/New_York','985':'America/Chicago','989':'America/New_York'
-};
+      /* Agent bar compact */
+      .agent-bar { padding: 8px 12px; }
+      .agent-edit-hint { display: none; }
+      .avatar { width: 34px; height: 34px; font-size: 11px; }
+      .agent-name { font-size: 13px; }
+      .agent-sub { font-size: 11px; }
 
-function getTimezoneForPhone(phone) {
-  const cleaned = (phone || '').replace(/\D/g, '');
-  const digits = cleaned.startsWith('1') ? cleaned.slice(1) : cleaned;
-  return areaCodeTimezones[digits.substring(0, 3)] || 'America/New_York';
-}
+      /* Lead card fields single column */
+      .lead-fields { grid-template-columns: 1fr; }
+      .lead-name { font-size: 16px; }
+      .lead-phone { font-size: 14px; }
 
-function isWithinCallingHours(phone) {
-  const tz = getTimezoneForPhone(phone);
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false
-  }).formatToParts(now);
-  const h = parseInt(parts.find(p => p.type === 'hour').value);
-  const m = parseInt(parts.find(p => p.type === 'minute').value);
-  return (h * 60 + m) >= 480 && (h * 60 + m) < 1020;
-}
+      /* Dispose buttons stack better */
+      .dispose-buttons.cols-3 { grid-template-columns: 1fr 1fr; }
+      .dispose-buttons.cols-2 { grid-template-columns: 1fr 1fr; }
+      .dispose-btn { padding: 10px 6px; font-size: 12px; }
 
-// ── REP AUTH MIDDLEWARE ──────────────────────────────────────
-async function requireRep(req, res, next) {
-  const token = req.headers['x-rep-token'];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  const result = await pool.query(
-    'SELECT r.* FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW() AND r.active = TRUE',
-    [token]
-  );
-  if (result.rows.length === 0) return res.status(401).json({ error: 'Session expired' });
-  req.rep = result.rows[0];
-  next();
-}
+      /* Waiting queue compact */
+      .waiting-card { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .waiting-claim-btn { width: 100%; text-align: center; }
+      .waiting-age { margin-left: 0; }
 
-// ── ADMIN AUTH MIDDLEWARE ────────────────────────────────────
-async function requireAdmin(req, res, next) {
-  const token = req.headers['x-admin-token'];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  const result = await pool.query(
-    'SELECT a.* FROM admin_sessions s JOIN admins a ON s.admin_id = a.id WHERE s.token = $1 AND s.expires_at > NOW()',
-    [token]
-  );
-  if (result.rows.length === 0) return res.status(401).json({ error: 'Session expired' });
-  req.admin = result.rows[0];
-  next();
-}
+      /* Top bar compact */
+      .top-bar-logo { font-size: 16px; }
+      .conn-status { font-size: 12px; }
 
-async function requireSuperAdmin(req, res, next) {
-  await requireAdmin(req, res, () => {
-    if (!req.admin.is_super_admin) return res.status(403).json({ error: 'Super admin required' });
-    next();
-  });
-}
+      /* Modal full screen on mobile */
+      .modal-overlay { align-items: flex-end; padding: 0; }
+      .modal { border-radius: 16px 16px 0 0; max-width: 100%; width: 100%; max-height: 90vh; }
 
-// ── WEBSOCKET ────────────────────────────────────────────────
-wss.on('connection', (ws) => {
-  clients.add(ws);
-  console.log(`Connected. Total: ${clients.size}`);
+      /* Popup full width */
+      .popup { width: 95%; padding: 1.5rem; }
+      .popup-type { font-size: 22px; }
 
-  pool.query('SELECT lead_id, lead_data, added_at FROM waiting_queue ORDER BY added_at ASC')
-    .then(result => {
-      if (result.rows.length > 0) {
-        // Send full lead data so client can claim properly after refresh
-        const queue = result.rows.map(row => ({
-          lead_id: row.lead_id,
-          lead_data: row.lead_data, // Already full data stored in DB
-          added_at: row.added_at
-        }));
-        ws.send(JSON.stringify({ type: 'waiting_queue_init', queue }));
-      }
-    }).catch(err => console.error('Queue fetch error:', err));
+      /* Admin mode bar */
+      #admin-mode-bar { font-size: 11px; padding: 8px 12px; }
+      #admin-mode-bar button { font-size: 11px; padding: 5px 10px; }
 
-  // Send rep their server-side state so client stays in sync
-  ws.on('message-init', async (repName) => {
-    if (repActiveLeads[repName]) {
-      ws.send(JSON.stringify({ type: 'server_state', hasActiveLead: true, activeLeadId: repActiveLeads[repName] }));
+      /* Cooldown overlay bottom */
+      .cooldown-overlay { bottom: 10px; right: 10px; left: 10px; text-align: center; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">⚡ Volt<span>lead</span></div>
+    <div class="login-sub">Sign in to your account</div>
+    <input type="email" id="login-email" placeholder="Email address" autocomplete="email" />
+    <div style="position:relative;margin-bottom:10px">
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" style="width:100%;padding:11px 40px 11px 14px;border:1px solid #ddd;border-radius:8px;font-size:15px;outline:none;" />
+      <span onclick="togglePassword()" id="pw-toggle" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;user-select:none;color:#888">👁</span>
+    </div>
+    <button onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ACCOUNT MODAL -->
+<div class="modal-overlay" id="account-modal">
+  <div class="modal">
+    <span class="modal-close" onclick="closeAccount()">✕</span>
+    <h2>My Account</h2>
+    <div class="modal-section">
+      <label>Profile Picture</label>
+      <div class="pic-upload-area" onclick="document.getElementById('pic-input').click()">
+        <img id="pic-preview" src="" alt="" style="display:none" />
+        <div id="pic-placeholder">📷 Click to upload photo</div>
+        <div class="pic-upload-label" id="pic-label" style="margin-top:6px;font-size:12px;color:#aaa">Recommended: square image</div>
+      </div>
+      <input type="file" id="pic-input" accept="image/*" style="display:none" onchange="handlePicUpload(event)" />
+      <button class="modal-btn" onclick="savePic()" style="margin-top:10px">Save Photo</button>
+      <div class="modal-msg" id="pic-msg"></div>
+    </div>
+    <hr style="border:none;border-top:1px solid #f0f0f0;margin:1rem 0" />
+    <div class="modal-section">
+      <label>Display Name</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <input type="text" id="profile-firstname" placeholder="First name" />
+        <input type="text" id="profile-lastname" placeholder="Last name" />
+      </div>
+      <button class="modal-btn" onclick="saveName()">Save Name</button>
+      <div class="modal-msg" id="name-msg"></div>
+    </div>
+    <hr style="border:none;border-top:1px solid #f0f0f0;margin:1rem 0" />
+    <div class="modal-section">
+      <label>Change Password</label>
+      <input type="password" id="cur-pw" placeholder="Current password" style="margin-bottom:8px" />
+      <input type="password" id="new-pw" placeholder="New password (min 6 chars)" style="margin-bottom:8px" />
+      <input type="password" id="confirm-pw" placeholder="Confirm new password" />
+      <button class="modal-btn" onclick="savePassword()">Update Password</button>
+      <div class="modal-msg" id="pw-msg"></div>
+    </div>
+    <hr style="border:none;border-top:1px solid #f0f0f0;margin:1rem 0" />
+    <button class="modal-btn" onclick="logout()" style="background:#e74c3c">Sign Out</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="top-bar">
+    <div class="top-bar-logo">⚡ Volt<span>lead</span></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="conn-status"><div class="dot" id="conn-dot"></div><span id="conn-label">Connecting...</span></div>
+      <button onclick="logout()" style="padding:6px 14px;background:none;border:1px solid #ddd;border-radius:7px;font-size:12px;color:#888;cursor:pointer;white-space:nowrap;" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background='none'">Sign Out</button>
+    </div>
+  </div>
+
+  <div id="admin-mode-bar" style="display:none;background:#1a1a2e;color:#1D9E75;padding:10px 16px;border-radius:10px;margin-bottom:1.2rem;display:none;align-items:center;justify-content:space-between;font-size:13px;font-weight:600;">
+    <span>⚡ Admin Mode — You are claiming as <span id="admin-mode-name"></span></span>
+    <button onclick="window.close()" style="padding:6px 14px;background:#1D9E75;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">← Back to Admin</button>
+  </div>
+  <div class="notif-bar" id="notif-bar" style="display:none">
+    🔔 Allow notifications to be alerted when a new lead comes in — even on another tab.
+    <button onclick="requestNotifPermission()">Allow Notifications</button>
+  </div>
+
+  <div class="tz-bar">
+    <div class="tz-card"><div class="tz-label">Eastern</div><div class="tz-time" id="tz-eastern">--:--</div></div>
+    <div class="tz-card"><div class="tz-label">Central</div><div class="tz-time" id="tz-central">--:--</div></div>
+    <div class="tz-card"><div class="tz-label">Mountain</div><div class="tz-time" id="tz-mountain">--:--</div></div>
+    <div class="tz-card"><div class="tz-label">Pacific</div><div class="tz-time" id="tz-pacific">--:--</div></div>
+  </div>
+
+  <div class="agent-bar" onclick="openAccount()" title="Click to manage your account">
+    <div class="avatar" id="user-avatar"><span id="avatar-initials">?</span></div>
+    <div>
+      <div class="agent-name" id="user-name-display">...</div>
+      <div class="agent-sub" id="shift-time">...</div>
+    </div>
+    <span class="agent-edit-hint">✏️ Edit profile</span>
+    <div class="cooldown-bar" id="cooldown-bar" style="display:none;margin-left:0">
+      Next claim in <span class="cooldown-timer" id="cooldown-count">60</span>s
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">You claimed</div><div class="stat-val" id="s-mine">0</div></div>
+    <div class="stat"><div class="stat-label">Team total</div><div class="stat-val" id="s-team">0</div></div>
+    <div class="stat"><div class="stat-label">Positive</div><div class="stat-val positive" id="s-positive">0</div></div>
+    <div class="stat"><div class="stat-label">→ VanillaSoft</div><div class="stat-val salesforce" id="s-salesforce">0</div></div>
+    <div class="stat"><div class="stat-label">Negative</div><div class="stat-val negative" id="s-negative">0</div></div>
+    <div class="stat"><div class="stat-label">Waiting</div><div class="stat-val" id="s-waiting">0</div></div>
+  </div>
+
+  <div class="waiting-section">
+    <div class="section-label">⏳ Waiting Queue</div>
+    <div class="waiting-cards" id="waiting-cards">
+      <div class="waiting-empty" id="waiting-empty">No leads waiting</div>
+    </div>
+  </div>
+
+  <div class="section-label">My Leads</div>
+  <div class="lead-cards" id="lead-cards">
+    <div class="empty-state" id="empty-msg">No leads claimed yet — a chime will sound when one comes in.</div>
+  </div>
+</div>
+
+<!-- CLAIM POPUP -->
+<div class="popup-overlay" id="popup-overlay">
+  <div class="popup">
+    <div class="popup-new">New Lead</div>
+    <div class="popup-type" id="p-type">Working Capital</div>
+    <div class="popup-tz" id="p-tz"></div>
+    <div class="popup-hours-warn" id="p-warn" style="display:none">
+      🔒 Outside calling hours — cannot claim yet<br>
+      <span style="font-size:13px;font-weight:700;margin-top:6px;display:block">Calling hours start in <strong id="p-hours-countdown">--:--:--</strong></span>
+      <span style="font-size:11px;opacity:0.7;margin-top:4px;display:block">Lead will be available to claim at 8:00 AM in lead's timezone</span>
+    </div>
+    <div class="popup-locked" id="p-locked" style="display:none">⚠️ Dispose your current lead before claiming a new one</div>
+    <div class="popup-timer" id="p-timer-row">Expires in <span id="p-countdown">30</span>s</div>
+    <div class="timer-bar-wrap"><div class="timer-bar" id="p-bar"></div></div>
+    <div class="popup-result" id="p-result"></div>
+    <button class="popup-claim-btn" id="p-btn" onclick="claimLead()">Claim this lead</button>
+    <div class="popup-pass" onclick="passLead()">Pass</div>
+  </div>
+</div>
+
+<div class="cooldown-overlay" id="cooldown-overlay">
+  You can claim another lead in <strong id="co-count">60</strong>s
+</div>
+
+<div class="copy-toast" id="copy-toast">📋 Number copied!</div>
+<audio id="chime" preload="auto"></audio>
+
+<script>
+  const SERVER_URL = 'https://lead-claim-server-production.up.railway.app';
+  const WS_URL = SERVER_URL.replace('https', 'wss');
+  const LS_TOKEN    = 'vl_repToken';
+  const LS_REPNAME  = 'vl_repName';
+  const LS_ACTIVE   = 'vl_activeLead';
+  const LS_STATS    = 'vl_stats';
+
+  let repName = '', repToken = '', ws = null, currentLeadId = null, currentLead = null;
+  let timerInterval = null, cooldownInterval = null, timeLeft = 30;
+  let myClaimed = 0, teamTotal = 0, countPositive = 0, countSalesforce = 0, countNegative = 0;
+  let onCooldown = false, cooldownLeft = 0;
+  let hasActiveLead = false;
+  let waitingQueue = {};
+  let pendingPicData = null;
+
+  // ── AUTH ──────────────────────────────────────────────────
+  function togglePassword() {
+    const input = document.getElementById('login-password');
+    const toggle = document.getElementById('pw-toggle');
+    if (input.type === 'password') {
+      input.type = 'text';
+      toggle.textContent = '🙈';
     } else {
-      ws.send(JSON.stringify({ type: 'server_state', hasActiveLead: false }));
+      input.type = 'password';
+      toggle.textContent = '👁';
     }
+  }
+
+  async function doLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    if (!email || !password) { errEl.textContent = 'Please enter your email and password'; return; }
+    try {
+      const res = await fetch(SERVER_URL + '/rep/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Login failed'; return; }
+      repToken = data.token;
+      repName = data.name;
+      localStorage.setItem(LS_TOKEN, repToken);
+      localStorage.setItem(LS_REPNAME, repName);
+      showDashboard(data);
+    } catch(e) {
+      errEl.textContent = 'Connection error — please try again';
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
+    if (e.key === 'Escape') closeAccount();
   });
 
-  ws.on('close', () => clients.delete(ws));
-  ws.on('message', async (data) => {
-    try {
-      const msg = JSON.parse(data);
+  async function logout() {
+    try { await fetch(SERVER_URL + '/rep/logout', { method: 'POST', headers: { 'x-rep-token': repToken } }); } catch(e) {}
+    localStorage.removeItem(LS_TOKEN);
+    localStorage.removeItem(LS_REPNAME);
+    localStorage.removeItem(LS_ACTIVE);
+    localStorage.removeItem(LS_STATS);
+    location.reload();
+  }
 
-      if (msg.type === 'claim') {
-        const { leadId, repToken: msgRepToken } = msg;
-        let repName = msg.repName;
-        // Verify rep token and use authenticated name from DB
-        if (msgRepToken) {
-          try {
-            const tokenResult = await pool.query(
-              'SELECT r.name FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW() AND r.active = TRUE',
-              [msgRepToken]
-            );
-            if (tokenResult.rows.length > 0) repName = tokenResult.rows[0].name;
-          } catch(e) { console.error('Token verify error:', e); }
-        }
-        const now = Date.now();
-        const lastClaim = repCooldowns[repName] || 0;
-        const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastClaim)) / 1000);
-        const hasActive = repActiveLeads[repName] && repActiveLeads[repName] !== leadId;
+  function showDashboard(repData) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    // Use first+last if available, fallback to name
+    if (repData.firstName && repData.lastName) {
+      repName = repData.firstName + ' ' + repData.lastName;
+    }
+    document.getElementById('user-name-display').textContent = repName;
+    document.getElementById('shift-time').textContent = 'Shift started ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    setAvatar(repData.profilePic, repName);
+    loadState();
+    updateStats();
+    renderWaitingQueue();
+    updateClocks();
+    setInterval(updateClocks, 10000);
+    checkNotifPermission();
+    connectWS();
+    loadRecentLeads();
+  }
 
-        if (claimedLeads[leadId]) {
-          ws.send(JSON.stringify({ type: 'claim_failed', leadId, claimedBy: claimedLeads[leadId] }));
-        } else if (hasActive) {
-          ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'active_lead', leadId }));
-        } else if (now - lastClaim < COOLDOWN_MS) {
-          ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'cooldown', secondsLeft, leadId }));
+  function setAvatar(picData, name) {
+    const avatarEl = document.getElementById('user-avatar');
+    const initialsEl = document.getElementById('avatar-initials');
+    if (picData) {
+      avatarEl.innerHTML = `<img src="${picData}" alt="${name}" />`;
+    } else {
+      avatarEl.innerHTML = `<span id="avatar-initials">${name.substring(0,2).toUpperCase()}</span>`;
+    }
+  }
+
+  // Auto-login if token saved
+  window.addEventListener('DOMContentLoaded', async () => {
+    const params = new URLSearchParams(window.location.search);
+    const switchToken = params.get('switch_token');
+    const switchName = params.get('switch_name');
+    const adminMode = params.get('admin_mode');
+    // Switch token always takes priority — clear any existing session first
+    if (switchToken) {
+      localStorage.removeItem(LS_TOKEN);
+      localStorage.removeItem(LS_REPNAME);
+      localStorage.removeItem(LS_ACTIVE);
+      localStorage.removeItem('vl_cooldownUntil');
+    }
+
+    if (switchToken && switchName) {
+      repToken = switchToken;
+      repName = decodeURIComponent(switchName);
+      localStorage.setItem(LS_TOKEN, repToken);
+      localStorage.setItem(LS_REPNAME, repName);
+      localStorage.removeItem(LS_ACTIVE);
+      localStorage.removeItem('vl_cooldownUntil');
+      window.history.replaceState({}, '', '/');
+      // Fetch full rep profile including pic before showing dashboard
+      try {
+        const res = await fetch(SERVER_URL + '/rep/me', { headers: { 'x-rep-token': repToken } });
+        const data = res.ok ? await res.json() : { name: repName, email: '', profilePic: null };
+        repName = data.name || repName;
+        localStorage.setItem(LS_REPNAME, repName);
+        showDashboard(data);
+      } catch(e) {
+        showDashboard({ name: repName, email: '', profilePic: null });
+      }
+      if (adminMode) {
+        const bar = document.getElementById('admin-mode-bar');
+        document.getElementById('admin-mode-name').textContent = repName;
+        bar.style.display = 'flex';
+      }
+      return;
+    }
+
+    const savedToken = localStorage.getItem(LS_TOKEN);
+    const savedName = localStorage.getItem(LS_REPNAME);
+    if (savedToken && savedName) {
+      repToken = savedToken;
+      repName = savedName;
+      try {
+        const res = await fetch(SERVER_URL + '/rep/me', { headers: { 'x-rep-token': repToken } });
+        if (res.ok) {
+          const data = await res.json();
+          repName = data.name;
+          // Always clear potentially stale active lead state on page load
+          // loadRecentLeads will re-establish it from DB accurately
+          localStorage.removeItem(LS_ACTIVE);
+          localStorage.removeItem('vl_cooldownUntil');
+          hasActiveLead = false;
+          showDashboard(data);
         } else {
-          // Check calling hours
-          const leadInfo = leadData[leadId];
-          if (leadInfo && leadInfo.withinCallingHours === false) {
-            const stillOutside = !isWithinCallingHours(leadInfo.phone || '');
-            if (stillOutside) {
-              ws.send(JSON.stringify({ type: 'claim_blocked', reason: 'outside_hours', leadId }));
-              return;
-            }
-          }
-          // DB-level atomic lock — prevents double claims after server restart
-          const existingClaim = await pool.query(
-            `SELECT rep_name FROM lead_events WHERE lead_id = $1 AND event_type = 'claimed' LIMIT 1`,
-            [leadId]
-          );
-          if (existingClaim.rows.length > 0) {
-            const claimedBy = existingClaim.rows[0].rep_name;
-            claimedLeads[leadId] = claimedBy; // Restore memory
-            ws.send(JSON.stringify({ type: 'claim_failed', leadId, claimedBy }));
-            return;
-          }
-          claimedLeads[leadId] = repName;
-          repCooldowns[repName] = now;
-          repActiveLeads[repName] = leadId;
-          // Always fetch full lead from DB to ensure complete data
-          let lead = leadData[leadId];
-          try {
-            const result = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
-            if (result.rows.length > 0) {
-              const r = result.rows[0];
-              lead = {
-                id: r.id, leadType: r.lead_type, timezone: r.timezone,
-                withinCallingHours: r.within_calling_hours,
-                firstName: r.first_name, lastName: r.last_name,
-                phone: r.phone, email: r.email, companyName: r.company_name,
-                state: r.state, qualifyAmount: r.qualify_amount,
-                timeline: r.timeline, timeInBusiness: r.time_in_business,
-                monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
-                conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
-                leadSource: r.lead_source || 'Facebook',
-                customFields: r.custom_fields || {},
-              };
-              leadData[leadId] = lead;
-            }
-          } catch(e) { console.error('Lead fetch error:', e); }
-          ws.send(JSON.stringify({ type: 'claim_success', leadId, lead }));
-          broadcastAll({ type: 'lead_claimed', leadId, claimedBy: repName });
-          await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [leadId]);
-          await pool.query(
-            'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
-            [leadId, 'claimed', repName]
-          );
-          console.log(`Lead ${leadId} claimed by ${repName}`);
+          localStorage.removeItem(LS_TOKEN);
         }
-      }
-
-      if (msg.type === 'dispose') {
-        const { leadId, disposition, notes, repToken: msgRepToken } = msg;
-        let repName = msg.repName;
-        // Verify via token for consistent naming
-        if (msgRepToken) {
-          try {
-            const tr = await pool.query(
-              'SELECT r.name FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW()',
-              [msgRepToken]
-            );
-            if (tr.rows.length > 0) repName = tr.rows[0].name;
-          } catch(e) {}
-        }
-        const lead = leadData[leadId] || {};
-        handleDisposition({ lead, disposition, notes, repName });
-        if (repActiveLeads[repName] === leadId) delete repActiveLeads[repName];
-        // Always remove from waiting queue on dispose
-        await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [leadId]);
-        broadcastAll({ type: 'lead_disposed', leadId, disposition, claimedBy: repName });
-        broadcastAll({ type: 'lead_claimed', leadId, claimedBy: repName }); // ensure queue UI updates
-        await pool.query(
-          'INSERT INTO lead_events (lead_id, event_type, rep_name, disposition, notes) VALUES ($1, $2, $3, $4, $5)',
-          [leadId, 'disposed', repName, disposition, notes]
-        );
-        console.log(`Disposed ${leadId}: ${disposition} by ${repName}`);
-      }
-
-      if (msg.type === 'pass') {
-        const { leadId, lead } = msg;
-        let repName = msg.repName;
-        // Verify token for consistent naming
-        if (msg.repToken) {
-          try {
-            const tr = await pool.query(
-              'SELECT r.name FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW()',
-              [msg.repToken]
-            );
-            if (tr.rows.length > 0) repName = tr.rows[0].name;
-          } catch(e) {}
-        }
-        // Only pass if NOT already claimed by someone else
-        if (claimedLeads[leadId] && claimedLeads[leadId] !== repName) {
-          console.log(`Pass rejected — lead ${leadId} already claimed by ${claimedLeads[leadId]}`);
-          return;
-        }
-        // Release active lead lock for this rep
-        if (repName && repActiveLeads[repName] === leadId) {
-          delete repActiveLeads[repName];
-        }
-        // Remove from claimedLeads so it can be claimed again
-        delete claimedLeads[leadId];
-        await addToWaitingQueue(leadId, lead);
-        await pool.query(
-          'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
-          [leadId, 'passed', repName || 'unknown']
-        );
-      }
-
-      if (msg.type === 'release_lock') {
-        const { repName } = msg;
-        if (repName) {
-          delete repActiveLeads[repName];
-          console.log(`Lock released for ${repName}`);
-        }
-      }
-
-      if (msg.type === 'rep_init') {
-        // Client asking server for their true state on connect
-        // Check DB for undisposed leads in last 2 hours — don't trust memory alone
-        const { repName, repToken: msgRepToken } = msg;
-        if (repName) {
-          let verifiedName = repName;
-          // Verify token to get consistent name
-          if (msgRepToken) {
-            try {
-              const tr = await pool.query(
-                'SELECT r.name, r.first_name, r.last_name FROM rep_sessions s JOIN reps r ON s.rep_id = r.id WHERE s.token = $1 AND s.expires_at > NOW()',
-                [msgRepToken]
-              );
-              if (tr.rows.length > 0) {
-                verifiedName = tr.rows[0].name;
-              }
-            } catch(e) { console.error('rep_init error:', e); }
-          }
-          
-          const activeLeadId = repActiveLeads[verifiedName] || null;
-          const cooldownMs = repCooldowns[verifiedName] ? Math.max(0, COOLDOWN_MS - (Date.now() - repCooldowns[verifiedName])) : 0;
-          ws.send(JSON.stringify({
-            type: 'server_state',
-            hasActiveLead: !!activeLeadId,
-            activeLeadId,
-            cooldownSecsLeft: Math.ceil(cooldownMs / 1000)
-          }));
-          console.log(`State sync for ${verifiedName}: active=${activeLeadId}, cooldown=${Math.ceil(cooldownMs/1000)}s`);
-        }
-      }
-
-      if (msg.type === 'expire') {
-        const { leadId } = msg;
-        // Don't expire if already claimed by someone
-        if (claimedLeads[leadId]) {
-          console.log(`Expire ignored — lead ${leadId} already claimed by ${claimedLeads[leadId]}`);
-          return;
-        }
-        let lead = msg.lead;
-        // Always fetch full lead from DB for queue storage
-        try {
-          const r = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
-          if (r.rows.length > 0) {
-            const row = r.rows[0];
-            lead = {
-              id: row.id, leadType: row.lead_type, timezone: row.timezone,
-              withinCallingHours: row.within_calling_hours,
-              firstName: row.first_name, lastName: row.last_name,
-              phone: row.phone, email: row.email, companyName: row.company_name,
-              state: row.state, qualifyAmount: row.qualify_amount,
-              timeline: row.timeline, timeInBusiness: row.time_in_business,
-              monthlyRevenue: row.monthly_revenue, fundsUsedFor: row.funds_used_for,
-              conductsBusiness: row.conducts_business, campaignName: row.campaign_name,
-            };
-          }
-        } catch(e) {}
-        await addToWaitingQueue(leadId, lead);
-        await pool.query(
-          'INSERT INTO lead_events (lead_id, event_type, rep_name) VALUES ($1, $2, $3)',
-          [leadId, 'expired', 'system']
-        );
-      }
-
-    } catch (err) {
-      console.error('Message error:', err);
+      } catch(e) {}
     }
   });
-});
 
-async function addToWaitingQueue(leadId, lead) {
-  try {
-    // Get full lead from DB
-    let fullLead = lead;
+  // ── ACCOUNT MODAL ─────────────────────────────────────────
+  function openAccount() {
+    document.getElementById('account-modal').classList.add('active');
+    // Pre-fill name fields from current rep data
+    const parts = repName.split(' ');
+    document.getElementById('profile-firstname').value = parts[0] || '';
+    document.getElementById('profile-lastname').value = parts.slice(1).join(' ') || '';
+  }
+  function closeAccount() {
+    document.getElementById('account-modal').classList.remove('active');
+    document.getElementById('pw-msg').textContent = '';
+    document.getElementById('pic-msg').textContent = '';
+    document.getElementById('cur-pw').value = '';
+    document.getElementById('new-pw').value = '';
+    document.getElementById('confirm-pw').value = '';
+    document.getElementById('name-msg').textContent = '';
+  }
+
+  function handlePicUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      pendingPicData = e.target.result;
+      const preview = document.getElementById('pic-preview');
+      preview.src = pendingPicData;
+      preview.style.display = 'block';
+      document.getElementById('pic-placeholder').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function savePic() {
+    if (!pendingPicData) { document.getElementById('pic-msg').textContent = 'Please select a photo first'; return; }
+    const msg = document.getElementById('pic-msg');
     try {
-      const result = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
-      if (result.rows.length > 0) {
-        const r = result.rows[0];
-        fullLead = {
-          id: r.id, leadType: r.lead_type, timezone: r.timezone,
-          withinCallingHours: r.within_calling_hours,
-          firstName: r.first_name, lastName: r.last_name,
-          phone: r.phone, email: r.email, companyName: r.company_name,
-          state: r.state, qualifyAmount: r.qualify_amount,
-          timeline: r.timeline, timeInBusiness: r.time_in_business,
-          monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
-          conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
-        };
+      const res = await fetch(SERVER_URL + '/rep/profile-pic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-rep-token': repToken },
+        body: JSON.stringify({ imageData: pendingPicData })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        msg.className = 'modal-msg success'; msg.textContent = 'Photo saved!';
+        setAvatar(pendingPicData, repName);
+      } else {
+        msg.className = 'modal-msg error'; msg.textContent = data.error;
       }
-    } catch(e) {}
+    } catch(e) { msg.className = 'modal-msg error'; msg.textContent = 'Error saving photo'; }
+  }
 
-    const inserted = await pool.query(
-      'INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO NOTHING RETURNING lead_id',
-      [leadId, JSON.stringify(fullLead)]
-    );
+  async function saveName() {
+    const firstName = document.getElementById('profile-firstname').value.trim();
+    const lastName = document.getElementById('profile-lastname').value.trim();
+    const msg = document.getElementById('name-msg');
+    if (!firstName || !lastName) { msg.className = 'modal-msg error'; msg.textContent = 'Both first and last name are required'; return; }
+    try {
+      const res = await fetch(SERVER_URL + '/rep/update-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-rep-token': repToken },
+        body: JSON.stringify({ firstName, lastName })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        repName = data.name;
+        localStorage.setItem(LS_REPNAME, repName);
+        document.getElementById('user-name-display').textContent = repName;
+        setAvatar(null, repName);
+        msg.className = 'modal-msg success'; msg.textContent = '✅ Name updated!';
+      } else {
+        msg.className = 'modal-msg error'; msg.textContent = data.error;
+      }
+    } catch(e) { msg.className = 'modal-msg error'; msg.textContent = 'Error updating name'; }
+  }
 
-    if (inserted.rows.length > 0) {
-      // Only broadcast lead_waiting (queue update) NOT new_lead (which triggers popup)
-      broadcastAll({ type: 'lead_waiting', leadId, lead: fullLead, addedAt: new Date().toISOString() });
+  async function savePassword() {
+    const cur = document.getElementById('cur-pw').value;
+    const nw = document.getElementById('new-pw').value;
+    const conf = document.getElementById('confirm-pw').value;
+    const msg = document.getElementById('pw-msg');
+    if (!cur || !nw || !conf) { msg.className = 'modal-msg error'; msg.textContent = 'All fields required'; return; }
+    if (nw !== conf) { msg.className = 'modal-msg error'; msg.textContent = 'Passwords do not match'; return; }
+    if (nw.length < 6) { msg.className = 'modal-msg error'; msg.textContent = 'Password must be at least 6 characters'; return; }
+    try {
+      const res = await fetch(SERVER_URL + '/rep/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-rep-token': repToken },
+        body: JSON.stringify({ currentPassword: cur, newPassword: nw })
+      });
+      const data = await res.json();
+      if (res.ok) { msg.className = 'modal-msg success'; msg.textContent = 'Password updated!'; document.getElementById('cur-pw').value=''; document.getElementById('new-pw').value=''; document.getElementById('confirm-pw').value=''; }
+      else { msg.className = 'modal-msg error'; msg.textContent = data.error; }
+    } catch(e) { msg.className = 'modal-msg error'; msg.textContent = 'Error updating password'; }
+  }
+
+  // ── LOCALSTORAGE ─────────────────────────────────────────
+  function saveState() {
+    localStorage.setItem(LS_ACTIVE, JSON.stringify(hasActiveLead ? (window._activeLeadData || null) : null));
+    localStorage.setItem(LS_STATS, JSON.stringify({ myClaimed, teamTotal, countPositive, countSalesforce, countNegative }));
+    if (onCooldown && cooldownLeft > 0) localStorage.setItem('vl_cooldownUntil', Date.now() + cooldownLeft * 1000);
+    else localStorage.removeItem('vl_cooldownUntil');
+  }
+
+  function loadState() {
+    try {
+      const stats = JSON.parse(localStorage.getItem(LS_STATS) || '{}');
+      myClaimed = stats.myClaimed || 0; teamTotal = stats.teamTotal || 0;
+      countPositive = stats.countPositive || 0; countSalesforce = stats.countSalesforce || 0; countNegative = stats.countNegative || 0;
+      const active = JSON.parse(localStorage.getItem(LS_ACTIVE) || 'null');
+      if (active) { window._activeLeadData = active; hasActiveLead = true; addLeadCard(active); }
+      const until = parseInt(localStorage.getItem('vl_cooldownUntil') || '0');
+      const remaining = Math.ceil((until - Date.now()) / 1000);
+      if (remaining > 0) startCooldown(remaining);
+    } catch(e) { console.warn('State load error', e); }
+  }
+
+  // ── NOTIFICATIONS ─────────────────────────────────────────
+  function checkNotifPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      document.getElementById('notif-bar').style.display = 'flex';
+    } else if (Notification.permission === 'granted') {
+      document.getElementById('notif-bar').style.display = 'none';
+    } else {
+      // Denied — hide bar, nothing we can do
+      document.getElementById('notif-bar').style.display = 'none';
     }
-  } catch (err) {
-    console.error('Waiting queue error:', err);
   }
-}
-
-async function handleDisposition({ lead, disposition, notes, repName }) {
-  if (['imn_app_taken', 'imn_app_sent'].includes(disposition)) {
-    // Salesforce — send full lead + disposition info
-    const salesforcePayload = {
-      first_name: lead.firstName,
-      last_name: lead.lastName,
-      phone: lead.phone,
-      email: lead.email,
-      company_name: lead.companyName,
-      state: lead.state,
-      lead_type: lead.leadType,
-      qualify_amount: lead.qualifyAmount,
-      timeline: lead.timeline,
-      time_in_business: lead.timeInBusiness,
-      monthly_revenue: lead.monthlyRevenue,
-      funds_used_for: lead.fundsUsedFor,
-      conducts_business: lead.conductsBusiness,
-      campaign_name: lead.campaignName,
-      lead_source: lead.leadSource || 'Facebook',
-      disposition,
-      notes,
-      rep_name: repName,
-      disposed_at: new Date().toISOString(),
-      ...(lead.customFields || {})
-    };
-    await sendToZapier(process.env.ZAPIER_SALESFORCE_WEBHOOK, salesforcePayload);
-
-  } else if (['left_message', 'no_answer', 'in_market_later'].includes(disposition)) {
-    // VanillaSoft — send only clean lead info for follow up
-    const vanillasoftPayload = {
-      first_name: lead.firstName,
-      last_name: lead.lastName,
-      phone: lead.phone,
-      email: lead.email,
-      company_name: lead.companyName,
-      state: lead.state,
-      lead_type: lead.leadType,
-      qualify_amount: lead.qualifyAmount,
-      timeline: lead.timeline,
-      time_in_business: lead.timeInBusiness,
-      monthly_revenue: lead.monthlyRevenue,
-      funds_used_for: lead.fundsUsedFor,
-      conducts_business: lead.conductsBusiness,
-      campaign_name: lead.campaignName,
-      lead_source: lead.leadSource || 'Facebook',
-      disposition,
-      rep_notes: notes,
-      rep_name: repName,
-      ...(lead.customFields || {})
-    };
-    await sendToZapier(process.env.ZAPIER_VANILLASOFT_WEBHOOK, vanillasoftPayload);
+  function requestNotifPermission() {
+    if (!('Notification' in window)) {
+      document.getElementById('notif-bar').style.display = 'none';
+      return;
+    }
+    // Must be called directly from user gesture for Edge compatibility
+    const req = Notification.requestPermission();
+    if (req && req.then) {
+      req.then(permission => {
+        document.getElementById('notif-bar').style.display = 'none';
+        if (permission === 'granted') {
+          // Test notification so user knows it worked
+          new Notification('⚡ Voltlead', { body: 'Notifications enabled! You will be alerted for new leads.', tag: 'notif-test' });
+        }
+      }).catch(() => {
+        document.getElementById('notif-bar').style.display = 'none';
+      });
+    } else {
+      // Old callback style
+      document.getElementById('notif-bar').style.display = 'none';
+    }
   }
-}
+  function sendNotification(lead) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      const n = new Notification('⚡ New Lead — ' + lead.leadType, {
+        body: tzLabel(lead.timezone) + ' timezone · Click to claim',
+        requireInteraction: true,
+        tag: 'lead-' + lead.id,
+        icon: '/favicon.ico'
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch(e) {
+      console.warn('Notification error:', e);
+    }
+  }
 
-async function sendToZapier(webhookUrl, payload) {
-  if (!webhookUrl) return console.warn('No webhook URL configured');
-  try {
-    const res = await fetch(webhookUrl, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+  // ── CLOCKS ────────────────────────────────────────────────
+  const TZ_ZONES = [
+    { id: 'tz-eastern', tz: 'America/New_York' }, { id: 'tz-central', tz: 'America/Chicago' },
+    { id: 'tz-mountain', tz: 'America/Denver' },  { id: 'tz-pacific', tz: 'America/Los_Angeles' },
+  ];
+  function updateClocks() {
+    const now = new Date();
+    TZ_ZONES.forEach(({ id, tz }) => {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true }).formatToParts(now);
+      const h = parts.find(p => p.type === 'hour').value;
+      const m = parts.find(p => p.type === 'minute').value;
+      const ap = (parts.find(p => p.type === 'dayperiod' || p.type === 'dayPeriod') || {}).value || '';
+      const el = document.getElementById(id);
+      el.textContent = `${h}:${m} ${ap}`;
+      const raw = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(now);
+      const hN = parseInt(raw.find(p => p.type === 'hour').value);
+      const mN = parseInt(raw.find(p => p.type === 'minute').value);
+      el.className = 'tz-time ' + ((hN * 60 + mN) >= 480 && (hN * 60 + mN) < 1020 ? 'in-hours' : 'out-hours');
     });
-    console.log(`Zapier response: ${res.status}`);
-  } catch (err) {
-    console.error('Zapier error:', err);
   }
-}
 
-// ── REP AUTH ROUTES ──────────────────────────────────────────
-app.post('/rep/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  const hash = hashPassword(password);
-  const result = await pool.query(
-    'SELECT * FROM reps WHERE email = $1 AND password_hash = $2 AND active = TRUE',
-    [email.toLowerCase(), hash]
-  );
-  if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
-  const rep = result.rows[0];
-  const token = generateToken();
-  await pool.query('INSERT INTO rep_sessions (token, rep_id) VALUES ($1, $2)', [token, rep.id]);
-  await pool.query('UPDATE reps SET last_login = NOW() WHERE id = $1', [rep.id]);
-  res.json({ token, name: rep.name, firstName: rep.first_name, lastName: rep.last_name, email: rep.email, profilePic: rep.profile_pic });
-});
+  // ── WEBSOCKET ─────────────────────────────────────────────
+  function connectWS() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = () => {
+      setConn(true);
+      // Ask server for authoritative state — never trust localStorage alone
+      if (repName) ws.send(JSON.stringify({ type: 'rep_init', repName, repToken }));
+    };
+    ws.onclose = () => { setConn(false); setTimeout(connectWS, 3000); };
+    ws.onerror = () => ws.close();
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'server_state') {
+        // Server tells us the truth — override any client-side state
+        hasActiveLead = msg.hasActiveLead;
+        if (!msg.hasActiveLead) {
+          window._activeLeadData = null;
+          localStorage.removeItem(LS_ACTIVE);
+        }
+        if (msg.cooldownSecsLeft > 0) {
+          startCooldown(msg.cooldownSecsLeft);
+        } else if (!msg.hasActiveLead) {
+          // Clear any stale cooldown
+          onCooldown = false;
+          cooldownLeft = 0;
+          document.getElementById('cooldown-bar').style.display = 'none';
+          document.getElementById('cooldown-overlay').classList.remove('active');
+          localStorage.removeItem('vl_cooldownUntil');
+        }
+        console.log('Server state sync:', msg);
+      }
 
-app.post('/rep/logout', requireRep, async (req, res) => {
-  const token = req.headers['x-rep-token'];
-  await pool.query('DELETE FROM rep_sessions WHERE token = $1', [token]);
-  res.json({ success: true });
-});
+      if (msg.type === 'waiting_queue_init') {
+        waitingQueue = {}; // Reset first
+        msg.queue.forEach(row => {
+          const lead = row.lead_data;
+          const leadId = row.lead_id || (lead && lead.id);
+          if (lead && leadId && !waitingQueue[leadId]) {
+            // Normalize lead fields (DB uses snake_case, client uses camelCase)
+            const normalized = {
+              id: leadId,
+              leadType: lead.leadType || lead.lead_type,
+              timezone: lead.timezone,
+              withinCallingHours: lead.withinCallingHours || lead.within_calling_hours,
+              firstName: lead.firstName || lead.first_name,
+              lastName: lead.lastName || lead.last_name,
+              phone: lead.phone,
+              email: lead.email,
+              companyName: lead.companyName || lead.company_name,
+              state: lead.state,
+              qualifyAmount: lead.qualifyAmount || lead.qualify_amount,
+              timeline: lead.timeline,
+              timeInBusiness: lead.timeInBusiness || lead.time_in_business,
+              monthlyRevenue: lead.monthlyRevenue || lead.monthly_revenue,
+              fundsUsedFor: lead.fundsUsedFor || lead.funds_used_for,
+              conductsBusiness: lead.conductsBusiness || lead.conducts_business,
+              campaignName: lead.campaignName || lead.campaign_name,
+            };
+            waitingQueue[leadId] = { lead: normalized, addedAt: new Date(row.added_at).getTime() };
+          }
+        });
+        renderWaitingQueue(); updateStats();
+      }
+      if (msg.type === 'lead_waiting') {
+        // Store full lead data so it persists across refreshes
+        if (msg.lead) {
+          addToWaiting(msg.lead, new Date(msg.addedAt).getTime());
+        }
+      }
+      if (msg.type === 'new_lead') {
+        sendNotification(msg.lead);
+        if (onCooldown || hasActiveLead) {
+          addToWaiting(msg.lead);
+          showLeadToast(msg.lead);
+        } else if (!msg.lead.withinCallingHours) {
+          // Outside calling hours — add to queue silently, no popup needed
+          addToWaiting(msg.lead);
+          showLeadToast(msg.lead);
+        } else {
+          showPopup(msg.lead);
+        }
+      }
+      if (msg.type === 'claim_success') {
+        clearTimeout(window._claimTimeout);
+        window._activeLeadData = msg.lead;
+        addLeadCard(msg.lead);
+        myClaimed++; hasActiveLead = true;
+        removeFromWaiting(msg.lead.id);
+        updateStats(); startCooldown(60); dismissPopup(); saveState();
+      }
+      if (msg.type === 'claim_failed') {
+        clearTimeout(window._claimTimeout);
+        showResult(false, msg.claimedBy);
+        removeFromWaiting(msg.leadId);
+        updateStats(); saveState();
+      }
+      if (msg.type === 'claim_blocked') {
+        clearTimeout(window._claimTimeout);
+        const r = document.getElementById('p-result');
+        const btn = document.getElementById('p-btn');
+        r.className = 'popup-result failed';
+        if (btn) { btn.textContent = 'Cannot Claim'; btn.style.background = '#aaa'; btn.disabled = true; }
+        if (msg.reason === 'cooldown') {
+          let secsLeft = msg.secondsLeft;
+          r.textContent = `⏱ Please wait ${secsLeft}s before claiming another lead`;
+          clearInterval(timerInterval);
+          timerInterval = setInterval(() => {
+            secsLeft--;
+            if (secsLeft <= 0) {
+              clearInterval(timerInterval);
+              if (btn) { btn.textContent = 'Claim this lead'; btn.style.background = ''; btn.disabled = false; }
+              r.textContent = '✅ Cooldown complete — you can now claim!';
+              r.className = 'popup-result success';
+            } else {
+              r.textContent = `⏱ Please wait ${secsLeft}s before claiming another lead`;
+            }
+          }, 1000);
+        } else if (msg.reason === 'outside_hours') {
+          r.textContent = '🔒 Cannot claim — lead is outside calling hours.';
+          setTimeout(dismissPopup, 3000);
+        } else {
+          r.textContent = '⚠️ Dispose your current lead before claiming a new one.';
+          setTimeout(dismissPopup, 3000);
+        }
+      }
+      if (msg.type === 'lead_claimed') {
+        teamTotal++; removeFromWaiting(msg.leadId); updateStats(); saveState();
+        // If the popup is showing this lead and someone else claimed it, disable pass
+        if (currentLeadId === msg.leadId && msg.claimedBy !== repName) {
+          const passBtn = document.querySelector('.popup-pass');
+          if (passBtn) { passBtn.style.display = 'none'; }
+        }
+      }
 
-app.get('/rep/me', requireRep, async (req, res) => {
-  res.json({ name: req.rep.name, firstName: req.rep.first_name, lastName: req.rep.last_name, email: req.rep.email, profilePic: req.rep.profile_pic });
-});
+      if (msg.type === 'lead_timeout_warning' && msg.repName === repName) {
+        // Show persistent warning banner on the lead card
+        const card = document.getElementById('card-' + msg.leadId);
+        if (card) {
+          let warning = document.getElementById('timeout-warn-' + msg.leadId);
+          if (!warning) {
+            warning = document.createElement('div');
+            warning.id = 'timeout-warn-' + msg.leadId;
+            warning.style.cssText = 'background:#FFF3CD;color:#856404;padding:10px 16px;font-size:13px;font-weight:500;border-top:1px solid #FFE082;';
+            card.appendChild(warning);
+          }
+          warning.textContent = msg.message;
+          // Also expand the card so rep sees the warning
+          card.classList.remove('collapsed');
+          const btn = document.getElementById('collapse-btn-' + msg.leadId);
+          if (btn) btn.textContent = '▼';
+        }
+        // Show toast
+        const t = document.getElementById('copy-toast');
+        t.textContent = msg.message;
+        t.style.background = '#856404';
+        t.classList.add('show');
+        setTimeout(() => { t.classList.remove('show'); t.style.background = ''; }, 6000);
+      }
 
-app.post('/rep/change-password', requireRep, async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both passwords required' });
-  const hash = hashPassword(currentPassword);
-  const result = await pool.query('SELECT id FROM reps WHERE id = $1 AND password_hash = $2', [req.rep.id, hash]);
-  if (result.rows.length === 0) return res.status(401).json({ error: 'Current password is incorrect' });
-  await pool.query('UPDATE reps SET password_hash = $1 WHERE id = $2', [hashPassword(newPassword), req.rep.id]);
-  res.json({ success: true });
-});
+      if (msg.type === 'lead_timeout' && msg.repName === repName) {
+        // Lead was released — clear active lead and show alert
+        if (hasActiveLead) {
+          hasActiveLead = false;
+          window._activeLeadData = null;
+          localStorage.removeItem(LS_ACTIVE);
+          saveState();
+        }
+        // Remove the lead card
+        const card = document.getElementById('card-' + msg.leadId);
+        if (card) card.remove();
+        // Show prominent toast
+        const t = document.getElementById('copy-toast');
+        t.textContent = '⏱ ' + msg.message;
+        t.style.background = '#c0392b';
+        t.classList.add('show');
+        setTimeout(() => { t.classList.remove('show'); t.style.background = ''; }, 8000);
+        updateStats();
+      }
+      if (msg.type === 'lead_disposed') markDisposed(msg.leadId, msg.disposition);
+    };
+  }
 
-app.post('/rep/profile-pic', requireRep, async (req, res) => {
-  const { imageData } = req.body;
-  if (!imageData) return res.status(400).json({ error: 'No image data provided' });
-  await pool.query('UPDATE reps SET profile_pic = $1 WHERE id = $2', [imageData, req.rep.id]);
-  res.json({ success: true, profilePic: imageData });
-});
+  function setConn(live) {
+    document.getElementById('conn-dot').className = 'dot' + (live ? ' live' : '');
+    document.getElementById('conn-label').textContent = live ? 'Live' : 'Reconnecting...';
+  }
 
-app.post('/rep/update-profile', requireRep, async (req, res) => {
-  const { firstName, lastName } = req.body;
-  if (!firstName || !lastName) return res.status(400).json({ error: 'First and last name required' });
-  const fullName = `${firstName.trim()} ${lastName.trim()}`;
-  await pool.query(
-    'UPDATE reps SET first_name = $1, last_name = $2, name = $3 WHERE id = $4',
-    [firstName.trim(), lastName.trim(), fullName, req.rep.id]
-  );
-  res.json({ success: true, name: fullName, firstName: firstName.trim(), lastName: lastName.trim() });
-});
-
-// Invite acceptance — set password from invite link
-app.get('/rep/invite/:token', async (req, res) => {
-  const result = await pool.query(
-    'SELECT i.*, r.name, r.email FROM rep_invites i JOIN reps r ON i.rep_id = r.id WHERE i.token = $1 AND i.used = FALSE AND i.expires_at > NOW()',
-    [req.params.token]
-  );
-  if (result.rows.length === 0) return res.status(404).json({ error: 'Invalid or expired invite link' });
-  res.json({ valid: true, name: result.rows[0].name, email: result.rows[0].email });
-});
-
-app.post('/rep/invite/:token/accept', async (req, res) => {
-  const { password } = req.body;
-  if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  const result = await pool.query(
-    'SELECT i.*, r.id as rep_id FROM rep_invites i JOIN reps r ON i.rep_id = r.id WHERE i.token = $1 AND i.used = FALSE AND i.expires_at > NOW()',
-    [req.params.token]
-  );
-  if (result.rows.length === 0) return res.status(404).json({ error: 'Invalid or expired invite link' });
-  const invite = result.rows[0];
-  await pool.query('UPDATE reps SET password_hash = $1 WHERE id = $2', [hashPassword(password), invite.rep_id]);
-  await pool.query('UPDATE rep_invites SET used = TRUE WHERE token = $1', [req.params.token]);
-  res.json({ success: true });
-});
-
-// ── LEAD WEBHOOK ─────────────────────────────────────────────
-app.post('/webhook/lead', async (req, res) => {
-  const body = req.body;
-  // Normalize field names — handle both snake_case and Title Case from Zapier
-  const normalize = (keys) => {
-    for (const k of keys) {
-      if (body[k] !== undefined && body[k] !== null && body[k] !== '') return body[k];
+  // ── POPUP ─────────────────────────────────────────────────
+  function showPopup(lead) {
+    currentLeadId = lead.id; currentLead = lead;
+    const isWC = lead.leadType === 'Working Capital';
+    const typeEl = document.getElementById('p-type');
+    typeEl.textContent = lead.leadType;
+    typeEl.className = 'popup-type ' + (isWC ? 'wc' : 'ef');
+    document.getElementById('p-tz').textContent = 'Lead timezone: ' + tzLabel(lead.timezone);
+    const outsideHours = !lead.withinCallingHours;
+    document.getElementById('p-warn').style.display = outsideHours ? 'block' : 'none';
+    if (outsideHours && lead.timezone) {
+      // Block claim button
+      const btn = document.getElementById('p-btn');
+      btn.disabled = true;
+      btn.style.background = '#aaa';
+      btn.textContent = '🔒 Locked — Outside Calling Hours';
+      document.getElementById('p-timer-row').style.display = 'none';
+      // Live countdown
+      clearInterval(window._hoursCountdownInterval);
+      const updateCountdown = () => {
+        const secs = secondsUntilCallingHours(lead.timezone);
+        const el = document.getElementById('p-hours-countdown');
+        if (el) el.textContent = formatCountdown(secs);
+        // When calling hours start, close popup — lead stays in queue to claim
+        if (secs === 0) {
+          clearInterval(window._hoursCountdownInterval);
+          dismissPopup();
+        }
+      };
+      updateCountdown();
+      window._hoursCountdownInterval = setInterval(updateCountdown, 1000);
+      // Lead already goes to waiting queue via new_lead handler — no need to pass
     }
-    return '';
-  };
-
-  const phone = normalize(['phone_number', 'phone', 'Phone Number', 'Phone']);
-  const campaignName = (normalize(['campaign_name', 'Campaign Name']) || '').toLowerCase();
-  const leadType = campaignName.includes('equipment') ? 'Equipment Financing' : 'Working Capital';
-  const tz = getTimezoneForPhone(phone);
-  const withinHours = isWithinCallingHours(phone);
-
-  // Extract known fields, everything else goes into custom_fields
-  const knownFields = ['first_name','last_name','phone','phone_number','email','company_name','state',
-    'campaign_name','form_name','lead_source','qualify_amount','how_much_would_you_like_to_qualify_for',
-    'timeline','how_soon_are_you_looking_for_funds','time_in_business','how_long_have_you_been_in_business',
-    'monthly_revenue','whats_your_current_monthly_revenue','funds_used_for','what_will_the_funds_be_used_for',
-    'conducts_business','how_do_you_conduct_business',
-    'First Name','Last Name','Phone Number','Phone','Email','Company Name','State',
-    'Campaign Name','Form Name','Lead Source','Qualify Amount','Timeline','Time In Business',
-    'Monthly Revenue','Use Of Funds','Conducts Business'];
-  const customFields = {};
-  Object.keys(body).forEach(key => {
-    if (!knownFields.includes(key)) customFields[key] = body[key];
-  });
-
-  const leadSource = normalize(['lead_source', 'Lead Source']) || 'Facebook';
-
-  const lead = {
-    id: `lead_${Date.now()}`,
-    receivedAt: new Date().toISOString(),
-    leadType, timezone: tz, withinCallingHours: withinHours,
-    firstName: normalize(['first_name', 'First Name']),
-    lastName: normalize(['last_name', 'Last Name']),
-    phone,
-    email: normalize(['email', 'Email']),
-    companyName: normalize(['company_name', 'Company Name']),
-    state: normalize(['state', 'State']),
-    qualifyAmount: normalize(['qualify_amount', 'Qualify Amount', 'how_much_would_you_like_to_qualify_for']),
-    timeline: normalize(['timeline', 'Timeline', 'how_soon_are_you_looking_for_funds']),
-    timeInBusiness: normalize(['time_in_business', 'Time In Business', 'how_long_have_you_been_in_business']),
-    monthlyRevenue: normalize(['monthly_revenue', 'Monthly Revenue', 'whats_your_current_monthly_revenue']),
-    fundsUsedFor: normalize(['funds_used_for', 'Use Of Funds', 'what_will_the_funds_be_used_for']),
-    conductsBusiness: normalize(['conducts_business', 'Conducts Business', 'how_do_you_conduct_business']),
-    campaignName: normalize(['campaign_name', 'Campaign Name']),
-    formName: normalize(['form_name', 'Form Name']),
-    leadSource,
-    customFields,
-  };
-
-  leadData[lead.id] = lead;
-
-  try {
-    await pool.query(`
-      INSERT INTO leads (id, lead_type, first_name, last_name, phone, email, company_name, state,
-        timezone, within_calling_hours, qualify_amount, timeline, time_in_business, monthly_revenue,
-        funds_used_for, conducts_business, campaign_name, form_name, lead_source, custom_fields)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-    `, [lead.id, lead.leadType, lead.firstName, lead.lastName, lead.phone, lead.email,
-        lead.companyName, lead.state, lead.timezone, lead.withinCallingHours,
-        lead.qualifyAmount, lead.timeline, lead.timeInBusiness, lead.monthlyRevenue,
-        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName,
-        lead.leadSource, JSON.stringify(lead.customFields || {})]);
-  } catch (err) {
-    console.error('DB insert error:', err);
+    document.getElementById('p-result').textContent = '';
+    const locked = hasActiveLead;
+    document.getElementById('p-locked').style.display = locked ? 'block' : 'none';
+    document.getElementById('p-timer-row').style.display = locked ? 'none' : 'block';
+    document.getElementById('p-btn').textContent = locked ? 'Dispose current lead first' : 'Claim this lead';
+    document.getElementById('p-btn').disabled = locked;
+    document.getElementById('p-btn').style.background = locked ? '#aaa' : '';
+    document.getElementById('popup-overlay').classList.add('active');
+    if (!locked) {
+      timeLeft = 30;
+      document.getElementById('p-countdown').textContent = timeLeft;
+      document.getElementById('p-bar').style.width = '100%';
+      try { document.getElementById('chime').play(); } catch(e){}
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('p-countdown').textContent = timeLeft;
+        document.getElementById('p-bar').style.width = (timeLeft/30*100) + '%';
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          if (ws) ws.send(JSON.stringify({ type: 'expire', leadId: lead.id, lead, repName }));
+          dismissPopup();
+        }
+      }, 1000);
+    }
   }
 
-  console.log(`New lead: ${lead.id} | ${leadType} | ${leadSource} | ${withinHours ? 'in hours' : 'OUTSIDE hours'} | ${tz}`);
-  broadcastAll({ type: 'new_lead', lead: { id: lead.id, leadType, withinCallingHours: withinHours, timezone: tz } });
-  res.json({ success: true, leadId: lead.id });
-});
-
-// ── ADMIN AUTH ───────────────────────────────────────────────
-app.post('/admin/login', async (req, res) => {
-  const { username, password } = req.body;
-  const hash = hashPassword(password);
-  const result = await pool.query(
-    'SELECT * FROM admins WHERE username = $1 AND password_hash = $2',
-    [username, hash]
-  );
-  if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
-  const admin = result.rows[0];
-  const token = generateToken();
-  await pool.query('INSERT INTO admin_sessions (token, admin_id) VALUES ($1, $2)', [token, admin.id]);
-  res.json({ token, username: admin.username, isSuperAdmin: admin.is_super_admin });
-});
-
-app.get('/admin/admins', requireSuperAdmin, async (req, res) => {
-  const result = await pool.query('SELECT id, username, is_super_admin, created_at FROM admins ORDER BY created_at');
-  res.json(result.rows);
-});
-
-app.post('/admin/admins', requireSuperAdmin, async (req, res) => {
-  const { username, password, isSuperAdmin } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-  try {
-    await pool.query(
-      'INSERT INTO admins (username, password_hash, is_super_admin) VALUES ($1, $2, $3)',
-      [username, hashPassword(password), isSuperAdmin || false]
-    );
-    res.json({ success: true });
-  } catch (err) {
-    res.status(400).json({ error: 'Username already exists' });
+  function claimLead() {
+    if (!currentLeadId || !ws || hasActiveLead || onCooldown) return;
+    ws.send(JSON.stringify({ type: 'claim', leadId: currentLeadId, repName, repToken }));
+    const btn = document.getElementById('p-btn');
+    btn.textContent = 'Claiming...';
+    btn.disabled = true;
+    clearInterval(timerInterval);
+    // Safety timeout — reset button if no server response in 5 seconds
+    window._claimTimeout = setTimeout(() => {
+      if (btn && btn.textContent === 'Claiming...') {
+        btn.textContent = 'Claim this lead';
+        btn.disabled = false;
+        document.getElementById('p-result').textContent = '⚠️ No response — try again';
+        document.getElementById('p-result').className = 'popup-result failed';
+      }
+    }, 5000);
   }
-});
 
-app.delete('/admin/admins/:id', requireSuperAdmin, async (req, res) => {
-  if (req.admin.id === parseInt(req.params.id)) return res.status(400).json({ error: 'Cannot delete yourself' });
-  await pool.query('DELETE FROM admins WHERE id = $1', [req.params.id]);
-  res.json({ success: true });
-});
+  function passLead() {
+    clearInterval(timerInterval);
+    clearTimeout(window._claimTimeout);
+    if (currentLead && ws) {
+      ws.send(JSON.stringify({ type: 'pass', leadId: currentLead.id, lead: currentLead, repName, repToken }));
+    }
+    // Release any stuck active lead state
+    hasActiveLead = false;
+    window._activeLeadData = null;
+    saveState();
+    dismissPopup();
+  }
 
-app.post('/admin/change-password', requireAdmin, async (req, res) => {
-  const { newPassword } = req.body;
-  await pool.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [hashPassword(newPassword), req.admin.id]);
-  res.json({ success: true });
-});
+  function dismissPopup() {
+    clearInterval(timerInterval);
+    clearInterval(window._hoursCountdownInterval);
+    document.getElementById('popup-overlay').classList.remove('active');
+    currentLeadId = null; currentLead = null;
+  }
 
-// ── ADMIN REP MANAGEMENT ─────────────────────────────────────
-app.get('/admin/reps', requireAdmin, async (req, res) => {
-  const result = await pool.query('SELECT id, name, email, active, profile_pic, invited_at, last_login FROM reps ORDER BY name');
-  res.json(result.rows);
-});
+  function showResult(success, claimedBy) {
+    const r = document.getElementById('p-result');
+    const btn = document.getElementById('p-btn');
+    if (success) { r.textContent = 'You got it!'; r.className = 'popup-result success'; btn.textContent = 'Claimed!'; btn.style.background = '#0F6E56'; }
+    else { r.textContent = (claimedBy||'Someone') + ' got there first.'; r.className = 'popup-result failed'; btn.textContent = 'Too slow'; btn.style.background = '#aaa'; }
+    btn.disabled = true;
+    setTimeout(dismissPopup, 2500);
+  }
 
-app.post('/admin/reps/invite', requireAdmin, async (req, res) => {
-  const { name, email } = req.body;
-  if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
-  try {
-    const repResult = await pool.query(
-      'INSERT INTO reps (name, email) VALUES ($1, $2) RETURNING id',
-      [name, email.toLowerCase()]
-    );
-    const repId = repResult.rows[0].id;
-    const token = generateToken();
-    await pool.query('INSERT INTO rep_invites (token, rep_id) VALUES ($1, $2)', [token, repId]);
-    const baseUrl = process.env.APP_URL || 'https://lead-claim-server-production.up.railway.app';
-    const inviteUrl = `${baseUrl}/invite.html?token=${token}`;
-    const html = `
-      <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
-        <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="color: #1D9E75; font-size: 28px; margin: 0;">⚡ Voltlead</h1>
-          <p style="color: #888; margin-top: 4px;">Real-time Lead Claiming</p>
+  // ── WAITING QUEUE ─────────────────────────────────────────
+  function addToWaiting(lead, addedAt) {
+    if (waitingQueue[lead.id]) return;
+    waitingQueue[lead.id] = { lead, addedAt: addedAt || Date.now() };
+    renderWaitingQueue(); updateStats();
+  }
+  function removeFromWaiting(leadId) {
+    if (!waitingQueue[leadId]) return;
+    delete waitingQueue[leadId];
+    renderWaitingQueue(); updateStats();
+  }
+  function renderWaitingQueue() {
+    const container = document.getElementById('waiting-cards');
+    const emptyEl = document.getElementById('waiting-empty');
+    container.querySelectorAll('.waiting-card').forEach(el => el.remove());
+    const ids = Object.keys(waitingQueue);
+    if (ids.length === 0) { emptyEl.style.display = 'block'; return; }
+    emptyEl.style.display = 'none';
+    ids.forEach(id => {
+      const { lead, addedAt } = waitingQueue[id];
+      const isWC = lead.leadType === 'Working Capital';
+      const ageSec = Math.floor((Date.now() - addedAt) / 1000);
+      const ageStr = ageSec < 60 ? `${ageSec}s ago` : ageSec < 3600 ? `${Math.floor(ageSec/60)}m ago` : ageSec < 86400 ? `${Math.floor(ageSec/3600)}h ago` : `${Math.floor(ageSec/86400)}d ago`;
+      const row = document.createElement('div');
+      row.className = 'waiting-card'; row.id = 'waiting-' + id;
+      const inHours = (() => {
+        try {
+          const secs = secondsUntilCallingHours(lead.timezone);
+          return secs === 0;
+        } catch(e) { return true; }
+      })();
+      row.innerHTML = `
+        <div class="waiting-card-info">
+          <span class="waiting-badge ${isWC ? 'wc' : 'ef'}">${lead.leadType}</span>
+          <span class="waiting-meta">${tzLabel(lead.timezone)}</span>
+          ${!inHours ? `<span class="waiting-age" id="wq-countdown-${id}" style="color:#D85A30;font-weight:600">⏰ --:--:--</span>` : `<span class="waiting-age">${ageStr}</span>`}
         </div>
-        <div style="background: #f9f9f9; border-radius: 12px; padding: 32px;">
-          <h2 style="margin: 0 0 12px; font-size: 20px;">You're invited, ${name}!</h2>
-          <p style="color: #555; line-height: 1.6;">You've been added to the Voltlead lead claiming platform. Click the button below to set your password and get started.</p>
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${inviteUrl}" style="background: #1D9E75; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block;">Accept Invitation</a>
+        <button class="waiting-claim-btn" id="wclaim-${id}" onclick="claimFromQueue('${id}')">Claim</button>
+      `;
+      // Start countdown for out-of-hours leads in queue
+      if (!inHours && lead.timezone) {
+        const updateWQCountdown = () => {
+          const el = document.getElementById('wq-countdown-' + id);
+          if (!el) return;
+          const secs = secondsUntilCallingHours(lead.timezone);
+          if (secs === 0) { el.textContent = '✅ In hours!'; el.style.color = '#1D9E75'; clearInterval(window['_wqcd_'+id]); }
+          else el.textContent = '⏰ ' + formatCountdown(secs);
+        };
+        updateWQCountdown();
+        window['_wqcd_'+id] = setInterval(updateWQCountdown, 1000);
+      }
+      container.appendChild(row);
+    });
+  }
+  function claimFromQueue(leadId) {
+    if (!ws || ws.readyState !== 1) { alert('Not connected — please refresh the page.'); return; }
+    if (hasActiveLead) { alert('Dispose your current lead before claiming a new one.'); return; }
+    if (onCooldown) { alert(`Please wait ${cooldownLeft} seconds before claiming another lead.`); return; }
+    // Check calling hours only if we have the lead data
+    const qItem = waitingQueue[leadId];
+    if (qItem && qItem.lead && qItem.lead.timezone) {
+      const secs = secondsUntilCallingHours(qItem.lead.timezone);
+      if (secs > 0) {
+        alert(`This lead cannot be claimed yet — calling hours start in ${formatCountdown(secs)} in the lead's timezone.`);
+        return;
+      }
+    }
+    const btn = document.getElementById('wclaim-' + leadId);
+    if (btn) { btn.textContent = 'Claiming...'; btn.disabled = true; }
+    // Always send claim regardless of local waitingQueue state
+    ws.send(JSON.stringify({ type: 'claim', leadId, repName, repToken }));
+    // Set a timeout to re-enable button if no response in 5s
+    setTimeout(() => {
+      if (btn && btn.textContent === 'Claiming...') {
+        btn.textContent = 'Claim';
+        btn.disabled = false;
+      }
+    }, 5000);
+  }
+  setInterval(() => { if (Object.keys(waitingQueue).length > 0) renderWaitingQueue(); }, 30000);
+
+  // ── COOLDOWN ──────────────────────────────────────────────
+  function startCooldown(seconds) {
+    onCooldown = true; cooldownLeft = seconds || 60;
+    document.getElementById('cooldown-bar').style.display = 'flex';
+    document.getElementById('cooldown-overlay').classList.add('active');
+    updateCooldownDisplay();
+    clearInterval(cooldownInterval);
+    cooldownInterval = setInterval(() => {
+      cooldownLeft--;
+      updateCooldownDisplay();
+      saveState();
+      if (cooldownLeft <= 0) {
+        clearInterval(cooldownInterval);
+        onCooldown = false;
+        document.getElementById('cooldown-bar').style.display = 'none';
+        document.getElementById('cooldown-overlay').classList.remove('active');
+        localStorage.removeItem('vl_cooldownUntil');
+      }
+    }, 1000);
+  }
+  function updateCooldownDisplay() {
+    document.getElementById('cooldown-count').textContent = cooldownLeft;
+    document.getElementById('co-count').textContent = cooldownLeft;
+  }
+
+  // ── LEAD CARDS ────────────────────────────────────────────
+  function addLeadCard(lead, overrideTime) {
+    if (!lead || document.getElementById('card-' + lead.id)) return;
+    const empty = document.getElementById('empty-msg');
+    if (empty) empty.style.display = 'none';
+    const isWC = lead.leadType === 'Working Capital';
+    const card = document.createElement('div');
+    card.className = 'lead-card'; card.id = 'card-' + lead.id;
+    const timeStr = overrideTime || new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    card.innerHTML = `
+      <div class="lead-card-header" onclick="toggleCollapse('${lead.id}')">
+        <span class="lead-type-badge ${isWC?'badge-wc':'badge-ef'}">${lead.leadType}</span>
+        <span class="lead-card-summary" id="summary-${lead.id}"></span>
+        <span class="lead-meta">${timeStr} · ${tzLabel(lead.timezone)}</span>
+        ${lead.leadSource ? `<span class="source-badge source-${(lead.leadSource||'').toLowerCase().replace(/\s+/g,'-')}">${lead.leadSource}</span>` : ''}
+        <button class="collapse-btn" id="collapse-btn-${lead.id}" title="Collapse">▼</button>
+      </div>
+      <div class="lead-card-body">
+        <div class="lead-name">${lead.firstName} ${lead.lastName}</div>
+        <div class="lead-phone" onclick="copyPhone('${lead.phone}')" title="Click to copy">${formatPhone(lead.phone)} <span class="copy-hint">📋</span></div>
+        <div class="lead-tz">
+          ${lead.email ? `<a href="mailto:${lead.email}?subject=Everlasting Capital — ${encodeURIComponent(lead.companyName || lead.firstName + ' ' + lead.lastName)}" style="color:#378ADD;text-decoration:none;" title="Send email">${lead.email} ✉️</a>` : ''}
+          ${lead.state ? ' · '+lead.state : ''}
+        </div>
+        <div class="lead-fields">
+          ${field('Company', lead.companyName)}
+          ${field('Qualify For', lead.qualifyAmount)}
+          ${field('Timeline', lead.timeline)}
+          ${field('Time in Business', lead.timeInBusiness)}
+          ${field('Monthly Revenue', lead.monthlyRevenue)}
+          ${field('Funds Used For', lead.fundsUsedFor)}
+          ${field('Conducts Business', lead.conductsBusiness)}
+          ${lead.customFields && Object.keys(lead.customFields).length > 0 ? 
+            Object.entries(lead.customFields)
+              .filter(([k,v]) => v && String(v).trim())
+              .map(([k,v]) => field(k.replace(/_/g,' ').replace(/\b\w/g, l => l.toUpperCase()), v))
+              .join('') : ''}
+        </div>
+        <div class="notes-label">Notes</div>
+        <textarea class="notes-input" id="notes-${lead.id}" placeholder="Add call notes here..."></textarea>
+
+        <div class="text-scripts-toggle" id="ts-toggle-${lead.id}" onclick="toggleScripts('${lead.id}')">
+          💬 Text Scripts <span class="ts-arrow">▼</span>
+        </div>
+        <div class="text-scripts-panel" id="ts-panel-${lead.id}"></div>
+
+        <div class="dispose-section">
+          <div class="dispose-group-label lbl-positive">✅ Positive — Salesforce</div>
+          <div class="dispose-buttons cols-2">
+            <button class="dispose-btn btn-imn-app"  onclick="dispose('${lead.id}','imn_app_taken')">IMN – App Taken</button>
+            <button class="dispose-btn btn-imn-sent" onclick="dispose('${lead.id}','imn_app_sent')">IMN – App Sent</button>
           </div>
-          <p style="color: #aaa; font-size: 13px; text-align: center;">This link expires in 7 days. If you didn't expect this email, you can ignore it.</p>
+          <div class="dispose-group-label lbl-salesforce">📋 Sent to VanillaSoft</div>
+          <div class="dispose-buttons cols-3">
+            <button class="dispose-btn btn-lm"  onclick="dispose('${lead.id}','left_message')">Left Message</button>
+            <button class="dispose-btn btn-na"  onclick="dispose('${lead.id}','no_answer')">No Answer</button>
+            <button class="dispose-btn btn-iml" onclick="dispose('${lead.id}','in_market_later')">In Market Later</button>
+          </div>
+          <div class="dispose-group-label lbl-negative">❌ Negative — Archive</div>
+          <div class="dispose-buttons cols-3">
+            <button class="dispose-btn btn-nq" onclick="dispose('${lead.id}','not_qualified')">Not Qualified</button>
+            <button class="dispose-btn btn-ni" onclick="dispose('${lead.id}','not_interested')">Not Interested</button>
+            <button class="dispose-btn btn-wn" onclick="dispose('${lead.id}','wrong_number')">Wrong Number</button>
+          </div>
         </div>
       </div>
     `;
-    await sendEmail(email, 'You\'re invited to Voltlead', html);
-    res.json({ success: true });
-  } catch (err) {
-    if (err.code === '23505') return res.status(400).json({ error: 'A rep with this email already exists' });
-    res.status(500).json({ error: 'Failed to create invitation' });
-  }
-});
-
-app.post('/admin/reps/:id/resend-invite', requireAdmin, async (req, res) => {
-  const rep = await pool.query('SELECT * FROM reps WHERE id = $1', [req.params.id]);
-  if (rep.rows.length === 0) return res.status(404).json({ error: 'Rep not found' });
-  const token = generateToken();
-  await pool.query('UPDATE rep_invites SET used = TRUE WHERE rep_id = $1', [req.params.id]);
-  await pool.query('INSERT INTO rep_invites (token, rep_id) VALUES ($1, $2)', [token, req.params.id]);
-  const baseUrl = process.env.APP_URL || 'https://lead-claim-server-production.up.railway.app';
-  const inviteUrl = `${baseUrl}/invite.html?token=${token}`;
-  const html = `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:40px 20px;"><h1 style="color:#1D9E75;">⚡ Voltlead</h1><p>Hi ${rep.rows[0].name},</p><p>Here's your new invitation link to access Voltlead:</p><div style="text-align:center;margin:32px 0;"><a href="${inviteUrl}" style="background:#1D9E75;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;">Set Password</a></div><p style="color:#aaa;font-size:13px;">This link expires in 7 days.</p></div>`;
-  await sendEmail(rep.rows[0].email, 'Your Voltlead invitation', html);
-  res.json({ success: true });
-});
-
-app.patch('/admin/reps/:id/toggle', requireAdmin, async (req, res) => {
-  const result = await pool.query('UPDATE reps SET active = NOT active WHERE id = $1 RETURNING active', [req.params.id]);
-  res.json({ active: result.rows[0].active });
-});
-
-app.post('/admin/reps/:id/reset-password', requireAdmin, async (req, res) => {
-  const { newPassword } = req.body;
-  if (!newPassword) return res.status(400).json({ error: 'Password required' });
-  await pool.query('UPDATE reps SET password_hash = $1 WHERE id = $2', [hashPassword(newPassword), req.params.id]);
-  await pool.query('DELETE FROM rep_sessions WHERE rep_id = $1', [req.params.id]);
-  res.json({ success: true });
-});
-
-app.post('/admin/reps/:id/reset-cooldown', requireAdmin, async (req, res) => {
-  const rep = await pool.query('SELECT name FROM reps WHERE id = $1', [req.params.id]);
-  if (rep.rows.length === 0) return res.status(404).json({ error: 'Rep not found' });
-  const name = rep.rows[0].name;
-  delete repCooldowns[name];
-  delete repActiveLeads[name];
-  res.json({ success: true });
-});
-
-// ── ADMIN REPORTING ──────────────────────────────────────────
-app.get('/admin/stats', requireAdmin, async (req, res) => {
-  const { from, to } = req.query;
-  const dateFilter = from && to ? `AND l.received_at BETWEEN '${from}' AND '${to}'` : '';
-  const [totals, byRep, byDisposition, byLeadType, avgResponse, waiting] = await Promise.all([
-    pool.query(`SELECT COUNT(*) as total_leads FROM leads l WHERE 1=1 ${dateFilter}`),
-    pool.query(`
-      SELECT e.rep_name,
-        COUNT(DISTINCT CASE WHEN e.event_type = 'claimed' THEN e.lead_id END) as claimed,
-        COUNT(DISTINCT CASE WHEN e.event_type = 'disposed' THEN e.lead_id END) as disposed,
-        COUNT(DISTINCT CASE WHEN e.disposition IN ('imn_app_taken','imn_app_sent') THEN e.lead_id END) as positive,
-        COUNT(DISTINCT CASE WHEN e.disposition IN ('left_message','no_answer','in_market_later') THEN e.lead_id END) as vanillasoft,
-        COUNT(DISTINCT CASE WHEN e.disposition IN ('not_qualified','not_interested','wrong_number') THEN e.lead_id END) as negative
-      FROM lead_events e
-      JOIN leads l ON e.lead_id = l.id
-      WHERE e.event_type IN ('claimed','disposed') ${dateFilter.replace('l.received_at','l.received_at')}
-      GROUP BY e.rep_name ORDER BY claimed DESC
-    `),
-    pool.query(`
-      SELECT e.disposition, COUNT(*) as count FROM lead_events e
-      JOIN leads l ON e.lead_id = l.id
-      WHERE e.event_type = 'disposed' ${dateFilter}
-      GROUP BY e.disposition ORDER BY count DESC
-    `),
-    pool.query(`SELECT l.lead_type, COUNT(*) as count FROM leads l WHERE 1=1 ${dateFilter} GROUP BY l.lead_type`),
-    pool.query(`
-      SELECT AVG(EXTRACT(EPOCH FROM (claim.created_at - l.received_at))) as avg_seconds
-      FROM lead_events claim JOIN leads l ON claim.lead_id = l.id
-      WHERE claim.event_type = 'claimed' ${dateFilter}
-    `),
-    pool.query('SELECT COUNT(*) as count FROM waiting_queue'),
-  ]);
-  res.json({
-    totalLeads: parseInt(totals.rows[0].total_leads),
-    byRep: byRep.rows,
-    byDisposition: byDisposition.rows,
-    byLeadType: byLeadType.rows,
-    avgResponseSeconds: Math.round(avgResponse.rows[0].avg_seconds || 0),
-    waitingCount: parseInt(waiting.rows[0].count),
-  });
-});
-
-app.get('/admin/leads', requireAdmin, async (req, res) => {
-  const { from, to, rep, disposition } = req.query;
-  let where = 'WHERE 1=1';
-  const params = [];
-  if (from && to) { params.push(from, to); where += ` AND l.received_at BETWEEN $${params.length-1} AND $${params.length}`; }
-  if (rep) { params.push(rep); where += ` AND claim_event.rep_name = $${params.length}`; }
-  if (disposition) { params.push(disposition); where += ` AND dispose_event.disposition = $${params.length}`; }
-  const result = await pool.query(`
-    SELECT l.*,
-      claim_event.rep_name as claimed_by, claim_event.created_at as claimed_at,
-      dispose_event.disposition, dispose_event.notes, dispose_event.created_at as disposed_at
-    FROM leads l
-    LEFT JOIN lead_events claim_event ON l.id = claim_event.lead_id AND claim_event.event_type = 'claimed'
-    LEFT JOIN lead_events dispose_event ON l.id = dispose_event.lead_id AND dispose_event.event_type = 'disposed'
-    ${where} ORDER BY l.received_at DESC LIMIT 500
-  `, params);
-  res.json(result.rows);
-});
-
-// Delete lead
-app.delete('/admin/leads/:id', requireAdmin, async (req, res) => {
-  await pool.query('DELETE FROM lead_events WHERE lead_id = $1', [req.params.id]);
-  await pool.query('DELETE FROM waiting_queue WHERE lead_id = $1', [req.params.id]);
-  await pool.query('DELETE FROM leads WHERE id = $1', [req.params.id]);
-  delete leadData[req.params.id];
-  res.json({ success: true });
-});
-
-// Manual lead addition
-app.post('/admin/leads/manual', requireAdmin, async (req, res) => {
-  const body = req.body;
-  const phone = body.phone || '';
-  const campaignName = (body.campaignName || '').toLowerCase();
-  const leadType = campaignName.includes('equipment') ? 'Equipment Financing' : 'Working Capital';
-  const tz = getTimezoneForPhone(phone);
-  const withinHours = isWithinCallingHours(phone);
-
-  const lead = {
-    id: `lead_${Date.now()}`,
-    receivedAt: new Date().toISOString(),
-    leadType, timezone: tz, withinCallingHours: withinHours,
-    firstName: body.firstName || '',
-    lastName: body.lastName || '',
-    phone,
-    email: body.email || '',
-    companyName: body.companyName || '',
-    state: body.state || '',
-    qualifyAmount: body.qualifyAmount || '',
-    timeline: body.timeline || '',
-    timeInBusiness: body.timeInBusiness || '',
-    monthlyRevenue: body.monthlyRevenue || '',
-    fundsUsedFor: body.fundsUsedFor || '',
-    conductsBusiness: body.conductsBusiness || '',
-    campaignName: body.campaignName || 'Manual Entry',
-    formName: 'Admin Manual',
-    leadSource: body.leadSource || 'Manual',
-    customFields: body.customFields || {},
-  };
-
-  leadData[lead.id] = lead;
-  try {
-    await pool.query(`
-      INSERT INTO leads (id, lead_type, first_name, last_name, phone, email, company_name, state,
-        timezone, within_calling_hours, qualify_amount, timeline, time_in_business, monthly_revenue,
-        funds_used_for, conducts_business, campaign_name, form_name, lead_source, custom_fields)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-    `, [lead.id, lead.leadType, lead.firstName, lead.lastName, lead.phone, lead.email,
-        lead.companyName, lead.state, lead.timezone, lead.withinCallingHours,
-        lead.qualifyAmount, lead.timeline, lead.timeInBusiness, lead.monthlyRevenue,
-        lead.fundsUsedFor, lead.conductsBusiness, lead.campaignName, lead.formName,
-        lead.leadSource, JSON.stringify(lead.customFields || {})]);
-  } catch (err) {
-    console.error('DB insert error:', err);
-  }
-
-  broadcastAll({ type: 'new_lead', lead: { id: lead.id, leadType, withinCallingHours: withinHours, timezone: tz } });
-  res.json({ success: true, leadId: lead.id });
-});
-
-app.get('/admin/export', requireAdmin, async (req, res) => {
-  const { from, to } = req.query;
-  const dateFilter = from && to ? `AND l.received_at BETWEEN '${from}' AND '${to}'` : '';
-  const result = await pool.query(`
-    SELECT l.received_at, l.lead_type, l.first_name, l.last_name, l.phone, l.email,
-      l.company_name, l.state, l.timezone, l.qualify_amount, l.timeline,
-      l.time_in_business, l.monthly_revenue, l.funds_used_for,
-      claim_event.rep_name as claimed_by, claim_event.created_at as claimed_at,
-      dispose_event.disposition, dispose_event.notes, dispose_event.created_at as disposed_at
-    FROM leads l
-    LEFT JOIN lead_events claim_event ON l.id = claim_event.lead_id AND claim_event.event_type = 'claimed'
-    LEFT JOIN lead_events dispose_event ON l.id = dispose_event.lead_id AND dispose_event.event_type = 'disposed'
-    WHERE 1=1 ${dateFilter} ORDER BY l.received_at DESC
-  `);
-  const headers = ['Received','Lead Type','First Name','Last Name','Phone','Email','Company','State','Timezone',
-    'Qualify Amount','Timeline','Time in Business','Monthly Revenue','Funds Used For',
-    'Claimed By','Claimed At','Disposition','Notes','Disposed At'];
-  const rows = result.rows.map(r => [
-    r.received_at, r.lead_type, r.first_name, r.last_name, r.phone, r.email,
-    r.company_name, r.state, r.timezone, r.qualify_amount, r.timeline,
-    r.time_in_business, r.monthly_revenue, r.funds_used_for,
-    r.claimed_by, r.claimed_at, r.disposition, r.notes, r.disposed_at
-  ].map(v => `"${(v||'').toString().replace(/"/g,'""')}"`).join(','));
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename=voltlead-leads.csv');
-  res.send([headers.join(','), ...rows].join('\n'));
-});
-
-app.get('/admin/waiting', requireAdmin, async (req, res) => {
-  const result = await pool.query('SELECT * FROM waiting_queue ORDER BY added_at ASC');
-  res.json(result.rows);
-});
-
-// ── REP RECENT LEADS ─────────────────────────────────────────
-app.get('/rep/recent-leads', requireRep, async (req, res) => {
-  const rep = req.rep;
-  // Get all names this rep has ever used (first_name+last_name combos + current name)
-  const possibleNames = [rep.name];
-  if (rep.first_name && rep.last_name) {
-    possibleNames.push(`${rep.first_name} ${rep.last_name}`);
-  }
-  // Also check any name stored in lead_events that could match this rep's email pattern
-  const result = await pool.query(`
-    SELECT DISTINCT ON (l.id) l.*,
-      e_claim.created_at as claimed_at,
-      e_claim.rep_name as claimed_by_name,
-      e_dispose.disposition, e_dispose.notes, e_dispose.created_at as disposed_at
-    FROM leads l
-    JOIN lead_events e_claim ON l.id = e_claim.lead_id AND e_claim.event_type = 'claimed'
-    LEFT JOIN lead_events e_dispose ON l.id = e_dispose.lead_id AND e_dispose.event_type = 'disposed'
-    WHERE l.received_at > NOW() - INTERVAL '30 days'
-    AND e_claim.rep_name = ANY($1)
-    ORDER BY l.id, e_claim.created_at DESC
-  `, [possibleNames]);
-  // Sort: undisposed first (most recent claim), then disposed (most recent first)
-  res.json(result.rows);
-});
-
-// Get admin's linked rep
-app.get('/admin/linked-rep', requireAdmin, async (req, res) => {
-  const result = await pool.query(
-    'SELECT a.linked_rep_id, r.name, r.id FROM admins a LEFT JOIN reps r ON a.linked_rep_id = r.id WHERE a.id = $1',
-    [req.admin.id]
-  );
-  const row = result.rows[0];
-  res.json({ linkedRepId: row?.linked_rep_id, linkedRepName: row?.name });
-});
-
-// Set admin's linked rep
-app.post('/admin/link-rep', requireAdmin, async (req, res) => {
-  const { repId } = req.body;
-  await pool.query('UPDATE admins SET linked_rep_id = $1 WHERE id = $2', [repId || null, req.admin.id]);
-  res.json({ success: true });
-});
-
-// ── ADMIN SWITCH TO REP ──────────────────────────────────────
-app.post('/admin/switch-to-rep', requireAdmin, async (req, res) => {
-  const admin = req.admin;
-  let repId;
-  let repName = admin.username;
-
-  // Use linked rep account if set
-  const adminData = await pool.query('SELECT linked_rep_id FROM admins WHERE id = $1', [req.admin.id]);
-  const linkedRepId = adminData.rows[0]?.linked_rep_id;
-
-  if (linkedRepId) {
-    // Use the admin's linked rep account
-    const repResult = await pool.query('SELECT * FROM reps WHERE id = $1', [linkedRepId]);
-    if (repResult.rows.length > 0) {
-      repId = repResult.rows[0].id;
-      repName = repResult.rows[0].name;
-      await pool.query('UPDATE reps SET active = TRUE WHERE id = $1', [repId]);
+    // Store lead data for text scripts
+    if (!window._leadDataMap) window._leadDataMap = {};
+    window._leadDataMap[lead.id] = lead;
+    const leadCardsEl = document.getElementById('lead-cards');
+    // Active leads go to top, disposed go to bottom
+    const firstDisposed = leadCardsEl.querySelector('.lead-card.collapsed');
+    if (firstDisposed) {
+      leadCardsEl.insertBefore(card, firstDisposed);
+    } else {
+      leadCardsEl.insertBefore(card, leadCardsEl.firstChild);
     }
   }
 
-  if (!repId) {
-    // No linked rep — return error asking admin to link one
-    return res.status(400).json({ error: 'No rep account linked. Go to Change Password page to link your rep account.' });
+  function field(label, val) {
+    if (!val) return '';
+    return `<div class="lead-field"><div class="field-label">${label}</div><div class="field-val">${val}</div></div>`;
   }
-  // Create a short-lived one-time token (5 minutes)
-  const token = generateToken();
-  await pool.query(
-    "INSERT INTO rep_sessions (token, rep_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '8 hours')",
-    [token, repId]
-  );
-  res.json({ token, repName });
-});
 
-// Manual queue recovery trigger (admin only)
-app.post('/admin/recover-queue', requireAdmin, async (req, res) => {
-  await recoverOrphanedLeads();
-  const result = await pool.query('SELECT COUNT(*) as count FROM waiting_queue');
-  res.json({ success: true, queueCount: parseInt(result.rows[0].count) });
-});
-
-// Force unclaim a stuck lead
-app.post('/admin/leads/:id/unclaim', requireAdmin, async (req, res) => {
-  const { id } = req.params;
-  await pool.query("DELETE FROM lead_events WHERE lead_id = $1 AND event_type = 'claimed'", [id]);
-  await pool.query("DELETE FROM waiting_queue WHERE lead_id = $1", [id]);
-  // Clear from memory
-  for (const [rep, leadId] of Object.entries(repActiveLeads)) {
-    if (leadId === id) delete repActiveLeads[rep];
-  }
-  delete claimedLeads[id];
-  // Re-add to waiting queue
-  const result = await pool.query('SELECT * FROM leads WHERE id = $1', [id]);
-  if (result.rows.length > 0) {
-    const r = result.rows[0];
-    const lead = {
-      id: r.id, leadType: r.lead_type, timezone: r.timezone,
-      withinCallingHours: r.within_calling_hours,
-      firstName: r.first_name, lastName: r.last_name,
-      phone: r.phone, email: r.email, companyName: r.company_name,
-      state: r.state, qualifyAmount: r.qualify_amount,
-      timeline: r.timeline, timeInBusiness: r.time_in_business,
-      monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
-      conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
-      leadSource: r.lead_source || 'Facebook', customFields: r.custom_fields || {},
-    };
-    await pool.query('INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO UPDATE SET lead_data = $2', [id, JSON.stringify(lead)]);
-    broadcastAll({ type: 'lead_waiting', lead, addedAt: new Date().toISOString() });
-  }
-  res.json({ success: true });
-});
-
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', connected: clients.size, leads: Object.keys(leadData).length });
-});
-
-function broadcastAll(data) {
-  const payload = JSON.stringify(data);
-  for (const client of clients) {
-    if (client.readyState === WebSocket.OPEN) client.send(payload);
-  }
-}
-
-// ── 2-HOUR LEAD TIMEOUT ──────────────────────────────────────
-const LEAD_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
-const LEAD_WARNING_MS = 90 * 60 * 1000;      // 90 minutes — warn rep
-
-async function checkLeadTimeouts() {
-  try {
-    // Find claimed but undisposed leads older than 90 minutes
-    // Only look at leads claimed in last 30 days, exclude already queued ones
-    const result = await pool.query(`
-      SELECT DISTINCT ON (e.lead_id) e.lead_id, e.rep_name, e.created_at as claimed_at,
-        l.first_name, l.last_name
-      FROM lead_events e
-      JOIN leads l ON e.lead_id = l.id
-      WHERE e.event_type = 'claimed'
-      AND e.created_at < NOW() - INTERVAL '90 minutes'
-      AND l.received_at > NOW() - INTERVAL '30 days'
-      AND NOT EXISTS (
-        SELECT 1 FROM lead_events d
-        WHERE d.lead_id = e.lead_id AND d.event_type IN ('disposed', 'timeout', 'passed')
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = e.lead_id
-      )
-      ORDER BY e.lead_id, e.created_at DESC
-    `);
-    
-    // Skip leads currently active in memory
-    const activeLeadIds = new Set(Object.values(repActiveLeads));
-
-    for (const row of result.rows) {
-      const claimedAt = new Date(row.claimed_at).getTime();
-      const age = Date.now() - claimedAt;
-      const leadId = row.lead_id;
-      const repName = row.rep_name;
-      
-      // Skip if currently active in memory
-      if (activeLeadIds.has(leadId)) continue;
-
-      if (age >= LEAD_TIMEOUT_MS) {
-        // 2+ hours — release lead back to queue
-        console.log(`Lead ${leadId} timed out for ${repName} — returning to queue`);
-        if (repActiveLeads[repName] === leadId) delete repActiveLeads[repName];
-        delete claimedLeads[leadId];
-        // Get full lead data
-        const leadResult = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
-        if (leadResult.rows.length > 0) {
-          const r = leadResult.rows[0];
-          const lead = {
-            id: r.id, leadType: r.lead_type, timezone: r.timezone,
-            withinCallingHours: r.within_calling_hours,
-            firstName: r.first_name, lastName: r.last_name,
-            phone: r.phone, email: r.email, companyName: r.company_name,
-            state: r.state, qualifyAmount: r.qualify_amount,
-            timeline: r.timeline, timeInBusiness: r.time_in_business,
-            monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
-            conductsBusiness: r.conducts_business,
-          };
-          await addToWaitingQueue(leadId, lead);
-          await pool.query(
-            'INSERT INTO lead_events (lead_id, event_type, rep_name, notes) VALUES ($1, $2, $3, $4)',
-            [leadId, 'timeout', repName, 'Returned to queue after 2 hour timeout']
-          );
-          // Notify rep their lead was released
-          broadcastAll({
-            type: 'lead_timeout',
-            leadId,
-            repName,
-            message: `${row.first_name} ${row.last_name} was returned to the queue after 2 hours`
-          });
-        }
-      } else if (age >= LEAD_WARNING_MS) {
-        // 90+ minutes — warn the rep
-        const minsLeft = Math.ceil((LEAD_TIMEOUT_MS - age) / 60000);
-        broadcastAll({
-          type: 'lead_timeout_warning',
-          leadId,
-          repName,
-          minutesLeft: minsLeft,
-          message: `⚠️ Your lead ${row.first_name} ${row.last_name} will return to the queue in ${minsLeft} minutes if not disposed`
-        });
+  function toggleScripts(leadId) {
+    const toggle = document.getElementById('ts-toggle-' + leadId);
+    const panel = document.getElementById('ts-panel-' + leadId);
+    const isOpen = panel.classList.contains('open');
+    if (!isOpen) {
+      // Build scripts on first open using lead data
+      const lead = window._leadDataMap && window._leadDataMap[leadId];
+      if (lead && !panel.dataset.built) {
+        panel.innerHTML = buildScripts(lead);
+        panel.dataset.built = '1';
       }
+      panel.classList.add('open');
+      toggle.classList.add('open');
+    } else {
+      panel.classList.remove('open');
+      toggle.classList.remove('open');
     }
-  } catch(err) {
-    console.error('Timeout check error:', err);
   }
-}
 
-// Run timeout check every 5 minutes
-setInterval(checkLeadTimeouts, 5 * 60 * 1000);
+  function buildScripts(lead) {
+    const name = lead.firstName || '[Name]';
+    // Filter out generic/junk values that shouldn't appear in scripts
+    const junkValues = ['something else', 'other', 'n/a', 'na', 'none', 'not sure', 'unsure', 'tbd', 'unknown'];
+    const rawEquip = lead.fundsUsedFor || lead.customFields?.equipment_type || '';
+    const equip = junkValues.includes(rawEquip.trim().toLowerCase()) ? '' : rawEquip.trim();
+    const equipLine = equip || 'equipment';
 
-// Recover orphaned leads — unclaimed leads not in waiting queue
-async function recoverOrphanedLeads() {
-  try {
-    // First clean up any disposed leads that are still in the waiting queue
-    await pool.query(`
-      DELETE FROM waiting_queue wq
-      WHERE EXISTS (
-        SELECT 1 FROM lead_events e
-        WHERE e.lead_id = wq.lead_id
-        AND e.event_type IN ('disposed', 'timeout')
-      )
-    `);
-    // Get currently active lead IDs from memory to exclude them
-    const activeLeadIds = Object.values(repActiveLeads);
-    const activeLeadIdList = activeLeadIds.length > 0 ? activeLeadIds : ['__none__'];
+    // Get rep's first name from stored repName (e.g. "Josh Feinberg" -> "Josh")
+    const repFirst = (repName || '').split(' ')[0] || 'Me';
 
-    const result = await pool.query(`
-      SELECT l.* FROM leads l
-      WHERE l.received_at > NOW() - INTERVAL '30 days'
-      AND l.id != ALL($1::text[])
-      AND NOT EXISTS (
-        SELECT 1 FROM lead_events e 
-        WHERE e.lead_id = l.id AND e.event_type IN ('disposed', 'timeout')
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM lead_events e2 
-        WHERE e2.lead_id = l.id AND e2.event_type = 'claimed'
-        AND NOT EXISTS (
-          SELECT 1 FROM lead_events d 
-          WHERE d.lead_id = l.id AND d.event_type IN ('disposed','timeout','passed')
-        )
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM waiting_queue wq WHERE wq.lead_id = l.id
-      )
-    `, [activeLeadIdList]);
-    for (const r of result.rows) {
-      const lead = {
-        id: r.id, leadType: r.lead_type, timezone: r.timezone,
-        withinCallingHours: r.within_calling_hours,
-        firstName: r.first_name, lastName: r.last_name,
-        phone: r.phone, email: r.email, companyName: r.company_name,
-        state: r.state, qualifyAmount: r.qualify_amount,
-        timeline: r.timeline, timeInBusiness: r.time_in_business,
-        monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
-        conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
-      };
-      await pool.query(
-        'INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO NOTHING',
-        [r.id, JSON.stringify(lead)]
-      );
-      console.log(`Recovered orphaned lead: ${r.first_name} ${r.last_name}`);
-    }
-    if (result.rows.length > 0) {
-      console.log(`Recovered ${result.rows.length} orphaned leads to queue`);
-      // Broadcast full queue refresh to all clients (not new_lead which triggers popup)
-      const queueResult = await pool.query('SELECT lead_id, lead_data, added_at FROM waiting_queue ORDER BY added_at ASC');
-      broadcastAll({ type: 'waiting_queue_init', queue: queueResult.rows });
-    }
-  } catch(err) {
-    console.error('Recovery error:', err);
+    const scripts = [
+      {
+        label: 'No Answer Text',
+        text: equip
+          ? `Hi ${name}, this is ${repFirst} from Everlasting Capital. I was following up on your inquiry for financing options for a ${equipLine} — this is my direct number, feel free to call or text me back.`
+          : `Hi ${name}, this is ${repFirst} from Everlasting Capital. I was following up on your inquiry for financing options — this is my direct number, feel free to call or text me back.`
+      },
+      {
+        label: 'Left Message Text',
+        text: equip
+          ? `Hi ${name}, it's ${repFirst} from Everlasting. I just tried calling — this is my direct number. I was following up on your inquiry for financing options for a ${equipLine}. Do you have one in mind or are you still looking?`
+          : `Hi ${name}, it's ${repFirst} from Everlasting. I just tried calling — this is my direct number. I was following up on your inquiry for financing options. Was it for equipment or capital options?`
+      }
+    ];
+
+    return scripts.map((s, i) => `
+      <div class="ts-script">
+        <div class="ts-script-label">${s.label}</div>
+        <div class="ts-script-text" id="ts-text-${lead.id}-${i}">${s.text}</div>
+        <button class="ts-copy-btn" id="ts-btn-${lead.id}-${i}" onclick="copyScript('${lead.id}', ${i})">
+          📋 Copy
+        </button>
+      </div>
+    `).join('');
   }
-}
 
-// Run recovery every 2 minutes
-setInterval(recoverOrphanedLeads, 2 * 60 * 1000);
-// Also run on startup after DB init
-setTimeout(recoverOrphanedLeads, 5000);
+  function copyScript(leadId, idx) {
+    const el = document.getElementById(`ts-text-${leadId}-${idx}`);
+    const btn = document.getElementById(`ts-btn-${leadId}-${idx}`);
+    if (!el || !btn) return;
+    navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+      btn.textContent = '✅ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.innerHTML = '📋 Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
 
-const PORT = process.env.PORT || 3000;
-initDB().then(() => {
-  server.listen(PORT, () => console.log(`Voltlead server on port ${PORT}`));
-}).catch(err => {
-  console.error('DB init failed:', err);
-  process.exit(1);
-});
+  function copyPhone(phone) {
+    navigator.clipboard.writeText((phone||'').replace(/\D/g,'')).then(() => {
+      const t = document.getElementById('copy-toast');
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    });
+  }
+
+  function dispose(leadId, disposition) {
+    const notes = document.getElementById('notes-'+leadId)?.value || '';
+    if (!ws) return;
+    const requiresNote = ['imn_app_taken','imn_app_sent','in_market_later','not_qualified','not_interested','wrong_number'];
+    const notesEl = document.getElementById('notes-'+leadId);
+    if (requiresNote.includes(disposition) && notesEl && !notes.trim()) {
+      notesEl.focus();
+      notesEl.style.borderColor = '#e74c3c';
+      notesEl.style.boxShadow = '0 0 0 3px rgba(231,76,60,0.15)';
+      notesEl.placeholder = '⚠️ Notes are required for this disposition';
+      setTimeout(() => { notesEl.style.borderColor = ''; notesEl.style.boxShadow = ''; notesEl.placeholder = 'Add call notes here...'; }, 3000);
+      return;
+    }
+    ws.send(JSON.stringify({ type: 'dispose', leadId, repName, repToken, disposition, notes }));
+    ws.send(JSON.stringify({ type: 'release_lock', repName }));
+    hasActiveLead = false; window._activeLeadData = null;
+    // Auto-collapse after disposing
+    setTimeout(() => {
+      const card = document.getElementById('card-'+leadId);
+      if (card) {
+        card.classList.add('collapsed');
+        const btn = document.getElementById('collapse-btn-'+leadId);
+        if (btn) btn.textContent = '▶';
+      }
+      const lead = window._lastDisposedLead || {};
+      setLeadSummary(leadId, (lead.firstName||'') + ' ' + (lead.lastName||''), disposition);
+    }, 1500);
+    const group = disposedGroup(disposition);
+    if (group === 'positive') countPositive++;
+    if (group === 'salesforce') countSalesforce++;
+    if (group === 'negative') countNegative++;
+    updateStats(); markDisposed(leadId, disposition); saveState();
+  }
+
+  function markDisposed(leadId, disposition) {
+    const card = document.getElementById('card-'+leadId);
+    if (!card) return;
+    card.querySelectorAll('.dispose-btn').forEach(b => b.disabled = true);
+    const notesEl = card.querySelector('.notes-input');
+    if (notesEl) notesEl.disabled = true;
+    if (!card.querySelector('.disposed-banner')) {
+      const banner = document.createElement('div');
+      banner.className = 'disposed-banner disposed-' + disposedGroup(disposition);
+      banner.textContent = disposedLabel(disposition);
+      card.appendChild(banner);
+    }
+    // Move disposed card to bottom of lead list
+    const leadCardsEl = document.getElementById('lead-cards');
+    if (leadCardsEl && card.parentNode === leadCardsEl) {
+      leadCardsEl.appendChild(card);
+    }
+  }
+
+  function disposedGroup(d) {
+    if (['imn_app_taken','imn_app_sent'].includes(d)) return 'positive';
+    if (['left_message','no_answer','in_market_later'].includes(d)) return 'salesforce';
+    return 'negative';
+  }
+  function disposedLabel(d) {
+    const map = {
+      imn_app_taken:'✅ Sent to Salesforce — IMN App Taken', imn_app_sent:'✅ Sent to Salesforce — IMN App Sent',
+      left_message:'📋 Sent to VanillaSoft — Left Message', no_answer:'📋 Sent to VanillaSoft — No Answer',
+      in_market_later:'📋 Sent to VanillaSoft — In Market Later', not_qualified:'❌ Archived — Not Qualified',
+      not_interested:'❌ Archived — Not Interested', wrong_number:'❌ Archived — Wrong Number',
+    };
+    return map[d] || d;
+  }
+
+  function showLeadToast(lead) {
+    const t = document.getElementById('copy-toast');
+    t.textContent = `📥 New ${lead.leadType} lead added to queue`;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  function toggleCollapse(leadId) {
+    const card = document.getElementById('card-' + leadId);
+    if (!card) return;
+    const isCollapsed = card.classList.toggle('collapsed');
+    const btn = document.getElementById('collapse-btn-' + leadId);
+    if (btn) btn.textContent = isCollapsed ? '▶' : '▼';
+  }
+
+  function setLeadSummary(leadId, name, disposition) {
+    const el = document.getElementById('summary-' + leadId);
+    if (!el) return;
+    if (disposition) {
+      el.textContent = name + ' · ' + disposedLabel(disposition).replace(/^[✅📋❌]\s/, '').split('—')[1]?.trim() || disposition;
+      el.style.color = '#aaa';
+    } else {
+      el.textContent = name;
+    }
+  }
+
+  async function loadRecentLeads() {
+    try {
+      const res = await fetch(SERVER_URL + '/rep/recent-leads', {
+        headers: { 'x-rep-token': repToken }
+      });
+      if (!res.ok) return;
+      const leads = await res.json();
+
+      // Reset stats from DB — don't trust localStorage
+      myClaimed = leads.length;
+      countPositive = 0; countSalesforce = 0; countNegative = 0;
+
+      if (leads.length === 0) { updateStats(); return; }
+
+      // Sort: undisposed leads first, disposed leads after
+      leads.sort((a, b) => {
+        const aActive = !a.disposition;
+        const bActive = !b.disposition;
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        // Within same group, most recently claimed first
+        return new Date(b.claimed_at) - new Date(a.claimed_at);
+      });
+
+      leads.forEach(l => {
+        const lead = {
+          id: l.id, leadType: l.lead_type, timezone: l.timezone,
+          withinCallingHours: l.within_calling_hours,
+          firstName: l.first_name, lastName: l.last_name,
+          phone: l.phone, email: l.email, companyName: l.company_name,
+          state: l.state, qualifyAmount: l.qualify_amount,
+          timeline: l.timeline, timeInBusiness: l.time_in_business,
+          monthlyRevenue: l.monthly_revenue, fundsUsedFor: l.funds_used_for,
+          conductsBusiness: l.conducts_business,
+          leadSource: l.lead_source || 'Facebook',
+          customFields: l.custom_fields || {},
+        };
+
+        // Add card with claimed time
+        if (!document.getElementById('card-' + lead.id)) {
+          addLeadCard(lead, new Date(l.claimed_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
+        }
+
+        // Tally disposition stats from DB
+        if (l.disposition) {
+          const grp = disposedGroup(l.disposition);
+          if (grp === 'positive') countPositive++;
+          if (grp === 'salesforce') countSalesforce++;
+          if (grp === 'negative') countNegative++;
+          markDisposed(lead.id, l.disposition);
+          // Auto-collapse disposed leads
+          const card = document.getElementById('card-' + lead.id);
+          if (card) {
+            card.classList.add('collapsed');
+            const btn = document.getElementById('collapse-btn-' + lead.id);
+            if (btn) btn.textContent = '▶';
+          }
+          // Restore notes
+          const notesEl = document.getElementById('notes-' + lead.id);
+          if (notesEl && l.notes) notesEl.value = l.notes;
+          setLeadSummary(lead.id, lead.firstName + ' ' + lead.lastName, l.disposition);
+        } else {
+          // Only block new claims if undisposed and claimed within 2 hours
+          const claimedAt = new Date(l.claimed_at).getTime();
+          const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
+          if (claimedAt > twoHoursAgo) {
+            hasActiveLead = true;
+            window._activeLeadData = lead;
+          }
+          setLeadSummary(lead.id, lead.firstName + ' ' + lead.lastName, null);
+        }
+      });
+
+      // Save accurate stats back to localStorage
+      saveState();
+      updateStats();
+    } catch(e) { console.warn('Could not load recent leads:', e); }
+  }
+
+  function updateStats() {
+    document.getElementById('s-mine').textContent = myClaimed;
+    document.getElementById('s-team').textContent = teamTotal;
+    document.getElementById('s-positive').textContent = countPositive;
+    document.getElementById('s-salesforce').textContent = countSalesforce;
+    document.getElementById('s-negative').textContent = countNegative;
+    document.getElementById('s-waiting').textContent = Object.keys(waitingQueue).length;
+  }
+
+  function formatPhone(phone) {
+    const c = (phone||'').replace(/\D/g,'');
+    const d = c.startsWith('1') ? c.slice(1) : c;
+    const m = d.match(/^(\d{3})(\d{3})(\d{4})$/);
+    return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
+  }
+  function secondsUntilCallingHours(tz) {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false
+    }).formatToParts(now);
+    const h = parseInt(parts.find(p => p.type === 'hour').value);
+    const m = parseInt(parts.find(p => p.type === 'minute').value);
+    const s = parseInt(parts.find(p => p.type === 'second').value);
+    const currentSecs = h * 3600 + m * 60 + s;
+    const startSecs = 8 * 3600; // 8:00 AM
+    const endSecs = 17 * 3600; // 5:00 PM
+    if (currentSecs >= startSecs && currentSecs < endSecs) return 0; // In hours
+    if (currentSecs < startSecs) return startSecs - currentSecs; // Before 8am today
+    // After 5pm — until 8am tomorrow
+    return (24 * 3600 - currentSecs) + startSecs;
+  }
+
+  function formatCountdown(secs) {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+  }
+
+  function tzLabel(tz) {
+    const map = { 'America/New_York':'Eastern','America/Chicago':'Central','America/Denver':'Mountain','America/Los_Angeles':'Pacific','America/Phoenix':'Arizona','Pacific/Honolulu':'Hawaii','America/Anchorage':'Alaska' };
+    return map[tz] || tz;
+  }
+</script>
+</body>
+</html>
