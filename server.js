@@ -1169,6 +1169,37 @@ app.post('/admin/recover-queue', requireAdmin, async (req, res) => {
   res.json({ success: true, queueCount: parseInt(result.rows[0].count) });
 });
 
+// Force unclaim a stuck lead
+app.post('/admin/leads/:id/unclaim', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  await pool.query("DELETE FROM lead_events WHERE lead_id = $1 AND event_type = 'claimed'", [id]);
+  await pool.query("DELETE FROM waiting_queue WHERE lead_id = $1", [id]);
+  // Clear from memory
+  for (const [rep, leadId] of Object.entries(repActiveLeads)) {
+    if (leadId === id) delete repActiveLeads[rep];
+  }
+  delete claimedLeads[id];
+  // Re-add to waiting queue
+  const result = await pool.query('SELECT * FROM leads WHERE id = $1', [id]);
+  if (result.rows.length > 0) {
+    const r = result.rows[0];
+    const lead = {
+      id: r.id, leadType: r.lead_type, timezone: r.timezone,
+      withinCallingHours: r.within_calling_hours,
+      firstName: r.first_name, lastName: r.last_name,
+      phone: r.phone, email: r.email, companyName: r.company_name,
+      state: r.state, qualifyAmount: r.qualify_amount,
+      timeline: r.timeline, timeInBusiness: r.time_in_business,
+      monthlyRevenue: r.monthly_revenue, fundsUsedFor: r.funds_used_for,
+      conductsBusiness: r.conducts_business, campaignName: r.campaign_name,
+      leadSource: r.lead_source || 'Facebook', customFields: r.custom_fields || {},
+    };
+    await pool.query('INSERT INTO waiting_queue (lead_id, lead_data) VALUES ($1, $2) ON CONFLICT (lead_id) DO UPDATE SET lead_data = $2', [id, JSON.stringify(lead)]);
+    broadcastAll({ type: 'lead_waiting', lead, addedAt: new Date().toISOString() });
+  }
+  res.json({ success: true });
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', connected: clients.size, leads: Object.keys(leadData).length });
 });
