@@ -1343,9 +1343,6 @@
       card.appendChild(banner);
     }
     // Move disposed card to bottom of lead list
-    // Store lead data for text scripts
-    if (!window._leadDataMap) window._leadDataMap = {};
-    window._leadDataMap[lead.id] = lead;
     const leadCardsEl = document.getElementById('lead-cards');
     if (leadCardsEl && card.parentNode === leadCardsEl) {
       leadCardsEl.appendChild(card);
